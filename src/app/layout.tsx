@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { INTRO_SCRIPT } from "@/lib/intro";
 import "./glass.css";
 
 export const metadata: Metadata = {
@@ -11,7 +12,11 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="id">
+    // Kelas "intro" dipasang skrip di <head> sebelum React aktif.
+    <html lang="id" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: INTRO_SCRIPT }} />
+      </head>
       <body>{children}</body>
     </html>
   );
