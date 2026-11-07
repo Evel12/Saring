@@ -27,20 +27,19 @@ export function InterviewCoordination({row}:{row:Snapshot}) {
   const [buffer,setBuffer]=useState(10);
   const [reminders,setReminders]=useState(1);
   const [hours,setHours]=useState(72);
-  const [people,setPeople]=useState([{email:org.is_demo?"interviewer@example.test":"",calendar_id:"primary",timezone:"Asia/Jakarta",weekdays:[0,1,2,3,4],start:"09:00",end:"17:00"}]);
+  const [people,setPeople]=useState([{email:"",calendar_id:"primary",timezone:"Asia/Jakarta",weekdays:[0,1,2,3,4],start:"09:00",end:"17:00"}]);
   const [approve,setApprove]=useState<Plan>();
   const [approved,setApproved]=useState(false);
   const [reason,setReason]=useState("");
   const [cancel,setCancel]=useState(false);
   const [cancelReason,setCancelReason]=useState("");
   const q=useLoad(async(signal)=>{
-    const [plans,status,briefs,mailbox]=await Promise.all([
+    const [plans,status,briefs]=await Promise.all([
       all<Plan>("/applications/"+row.application.id+"/interview-plans",signal),
       request<{coordination:Coordination|null;authorizations:{plan_id:string;actor_id:string;created_at:number}[]}>("/applications/"+row.application.id+"/interview-coordination",{signal}),
-      all<BriefDraft>("/applications/"+row.application.id+"/brief-drafts",signal),
-      org.is_demo?request<{items:{id:string;kind:string;recipient:string;portal_url:string}[]}>("/demo/interview-mailbox?application_id="+row.application.id,{signal}):Promise.resolve({items:[]})
+      all<BriefDraft>("/applications/"+row.application.id+"/brief-drafts",signal)
     ]);
-    return {plans,status,briefs,mailbox};
+    return {plans,status,briefs};
   },[row.application.id,revision]);
   const brief=q.data?.briefs.filter(b=>b.state==="approved").sort((a,b)=>b.revision-a.revision)[0];
   const latest=q.data?.plans.sort((a,b)=>b.version-a.version)[0];
@@ -81,9 +80,7 @@ export function InterviewCoordination({row}:{row:Snapshot}) {
     {latest&&<div className="round-card"><h3>Plan version {latest.version}</h3><p>Recipient: {String(latest.content.recipient)}</p><p className="hint">Any changed recipient, content or policy requires a new version and renewed approval.</p>{!q.data?.status.authorizations.some(a=>a.plan_id===latest.id)&&<button className="primary" disabled={busy} onClick={()=>{setApprove(latest);setApproved(false);setReason("");}}>Review interview invitation approval</button>}</div>}
     {coord&&<div className="round-card"><div className="label-row"><h3>Persisted scheduling status</h3><Badge>{words(coord.state)}</Badge></div>{coord.booked_slot&&<p>{dated(coord.booked_slot.start,coord.booked_slot.timezone)}</p>}{coord.error&&<p role="status" className="notice warning">{coord.error}</p>}
       <p className="hint">Google event identifier: {coord.provider_event_id}. Email acceptance is not evidence of delivery or reading.</p>
-      {org.is_demo && coord.state==="options_ready" && <button className="secondary" disabled={busy} onClick={()=>perform(()=>post("/demo/applications/"+row.application.id+"/calendar-conflict",{}),"DEMO: first offered slot is now busy. The candidate must select, receive the persisted conflict, then explicitly choose an alternative.")}>Simulate calendar conflict · DEMO</button>}
       {coord.actions.map(action=><div className="source-card" key={action.id}><b>{words(action.kind)} · {words(action.state)}</b>{action.provider_id&&<p className="tiny">Provider reference: {action.provider_id}</p>}{action.error&&<p>{action.error}</p>}{["failed","delivery_unknown","not_configured","expired_credential"].includes(action.state)&&<button className="secondary" disabled={busy} onClick={()=>perform(()=>post("/interview-actions/"+action.id+"/retry",{}),"Provider reconciliation/retry queued with the same identifier.")}>Reconcile or retry interview action</button>}</div>)}
-      {q.data?.mailbox.items.filter(m=>["invite","reminder"].includes(m.kind)).slice(-1).map(m=><div className="notice" key={m.id}><div><b>DEMO interview mailbox · {m.recipient}</b><p>No email was transmitted. Use a separate browser profile.</p><a className="secondary" href={m.portal_url} target="_blank" rel="noreferrer">Open demo scheduling portal</a></div></div>)}
       {coord.state!=="cancelled"&&<button className="secondary danger" onClick={()=>setCancel(true)}>Cancel interview coordination</button>}
     </div>}
     {approve&&<Modal title="Approve this interview invitation and scheduling policy?" close={()=>setApprove(undefined)}><div className="editor-form"><p>Version {approve.version} · Recipient {String(approve.content.recipient)}</p><pre className="brief-preview">{JSON.stringify(approve.content,null,2)}</pre><p>Permits explicit candidate selections within these constraints, one candidate confirmation per booking/reschedule, and cancellation of the existing event if the application is withdrawn or the shortlist is revoked. If enabled above, Google invites and updates only the approved interviewers with this event title and description. The candidate is excluded from Google attendees and receives only approved email-adapter messages.</p><label className="checkbox"><input type="checkbox" checked={approved} onChange={e=>setApproved(e.target.checked)}/>I approve this exact interview recipient, content and bounded scheduling policy.</label><label>Interview authorization reason<textarea required value={reason} onChange={e=>setReason(e.target.value)}/></label><button className="primary" disabled={busy||!approved||!reason.trim()} onClick={()=>perform(async()=>{await post("/interview-plans/"+approve.id+"/approve",{rationale:reason});setApprove(undefined);},"Interview authorization saved; invitation queued, not claimed delivered.")}>Approve interview invitation</button></div></Modal>}

@@ -6,10 +6,19 @@ export type Page<T> = {
   has_more: boolean;
 };
 export type Health = {
-  mode: "demo" | "live";
+  mode: string;
   model: string;
   calendar: string;
   schema: string;
+  provider?: "openai" | "ollama" | "none";
+  model_name?: string;
+};
+export type AiConfig = {
+  provider: "openai" | "ollama" | "none";
+  base_url: string;
+  model: string;
+  source: "server" | "environment" | "unset";
+  openai_key_present: boolean;
 };
 export type Me = {
   organization_id: string;
@@ -19,13 +28,12 @@ export type Me = {
   scopes: string[];
   memberships: { org_id: string; organization_name: string; role: string }[];
 };
-export type Org = { id: string; name: string; is_demo: boolean };
+export type Org = { id: string; name: string };
 export type Vacancy = {
   id: string;
   title: string;
   description: string;
   state: "draft" | "published" | "closed";
-  is_sample: boolean;
   active_requirement_version_id: string | null;
   created_at: number;
 };
@@ -61,12 +69,13 @@ export type Application = {
   decision: string;
   created_at: number;
   withdrawn_at: number | null;
+  /** Answers submitted through the public apply link ({} for manual uploads). */
+  intro_answers?: Record<string, string>;
 };
 export type Candidate = {
   id: string;
   display_name: string;
   email: string | null;
-  synthetic: boolean;
 };
 export type Document = {
   id: string;
@@ -74,7 +83,6 @@ export type Document = {
   original_name: string;
   media_type: string;
   size_bytes: number;
-  synthetic: boolean;
   excluded_at?: number | null;
   exclusion_reason?: string;
   created_at: number;
@@ -96,7 +104,7 @@ export type Evidence = {
 };
 export type FindingState = "supported" | "partial" | "unknown" | "conflicting";
 export type Revision = {
-  provenance?: { provider?: string; model?: string; prompt_version?: string; extraction_version_ids?: string[]; citation_validation?: string };
+  provenance?: { provider?: string; model?: string; prompt_version?: string; extraction_version_ids?: string[]; citation_validation?: string; association_mode?: string };
   id: string;
   finding_id: string;
   revision: number;
@@ -106,6 +114,14 @@ export type Revision = {
   evidence_ids: string[];
   created_at: number;
   supersedes_id: string | null;
+};
+export type EvidenceSuggestion = {
+  id: string;
+  passage: string;
+  overlap: number;
+  page: number | null;
+  paragraph: number | null;
+  document_id: string | null;
 };
 export type Finding = {
   id: string;
@@ -117,6 +133,9 @@ export type Brief = {
   vacancy_title: string;
   requirement_version_id: string;
   reassessment_required: boolean;
+  /** Verbatim answers from the public apply link, by question text. */
+  intro_answers?: Record<string, string>;
+  summary?: string | null;
   requirements: Criterion[];
   findings: Finding[];
   evidence: Evidence[];
@@ -162,7 +181,21 @@ export type Activity = {
   kind: string;
   message: string;
   run_id?: string | null;
-  details?: { tool?: string; result?: string; duration_seconds?: number; attempt?: number; error_code?: string };
+  details?: {
+    tool?: string;
+    result?: string;
+    url?: string;
+    error?: string;
+    duration_seconds?: number;
+    attempt?: number;
+    error_code?: string;
+    step?: string;
+    index?: number;
+    total?: number;
+    cited?: number;
+    without_citations?: number;
+    skipped?: number;
+  };
   application_id: string | null;
   vacancy_id: string | null;
 };

@@ -30,6 +30,16 @@ if url.startswith("sqlite:"):
     def sqlite_settings(connection, record):
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute("PRAGMA busy_timeout=30000")
+        try:
+            # WAL lets API readers and worker writers proceed without
+            # colliding (rollback-journal mode made any concurrent reader
+            # block a writer's commit, surfacing as "database is locked").
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("PRAGMA synchronous=NORMAL")
+        except Exception:
+            # Already set by a concurrent process, or a momentary write
+            # lock: foreign keys and busy_timeout below stay mandatory.
+            pass
 
 
 Session = sessionmaker(engine, expire_on_commit=False)

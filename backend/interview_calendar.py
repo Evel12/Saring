@@ -1,4 +1,4 @@
-"""Explicit demo and Google Calendar adapters, stable IDs and conditional updates."""
+"""Google Calendar adapters, stable IDs and conditional updates."""
 from datetime import datetime, timezone
 from urllib.parse import quote
 import httpx
@@ -21,10 +21,6 @@ def check(response):
 
 
 def busy(s,coord,policy,start,end):
-    if s.get(m.Organization,coord.org_id).is_demo:
-        connection=s.scalar(select(m.ProviderConnection).where(m.ProviderConnection.org_id==coord.org_id,m.ProviderConnection.provider=="google_calendar"))
-        injected=connection.config.get("_demo_busy",[]) if connection else []
-        return injected + [{"start":x.booked_slot["start"],"end":x.booked_slot["end"]} for x in s.scalars(select(m.InterviewCoordination).where(m.InterviewCoordination.org_id==coord.org_id,m.InterviewCoordination.id!=coord.id)) if x.booked_slot and x.state!="cancelled"]
     token=access_token(s,coord.org_id)
     calendars=list(dict.fromkeys([coord.calendar_id]+[x["calendar_id"] for x in policy["interviewers"]]))
     result=[]
@@ -59,8 +55,6 @@ def busy(s,coord,policy,start,end):
 
 def apply(s,coord,plan,action,cancel=False):
     """GET stable event ID before every write/retry; never create a second event."""
-    if s.get(m.Organization,coord.org_id).is_demo:
-        return {"id":coord.provider_event_id,"mode":"demo"}
     token=access_token(s,coord.org_id)
     url=f"https://www.googleapis.com/calendar/v3/calendars/{quote(coord.calendar_id,safe='')}/events/{coord.provider_event_id}"
     selected=action.payload.get("slot")
@@ -128,7 +122,6 @@ def apply(s,coord,plan,action,cancel=False):
 
 def reconcile(s,coord,plan,action):
     """Read-only recovery before free/busy (our uncertain insert may already be busy)."""
-    if s.get(m.Organization,coord.org_id).is_demo:return False
     token=access_token(s,coord.org_id)
     url=f"https://www.googleapis.com/calendar/v3/calendars/{quote(coord.calendar_id,safe='')}/events/{coord.provider_event_id}"
     with httpx.Client(timeout=20,follow_redirects=False,headers={"Authorization":"Bearer "+token}) as client:

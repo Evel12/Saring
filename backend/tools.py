@@ -1,6 +1,6 @@
 """Bounded tools. Untrusted documents never become system instructions."""
 
-import os, re, json
+import re, json
 from openai import OpenAI
 
 PROTECTED = re.compile(
@@ -17,26 +17,19 @@ def evaluation_text(text):
 from backend.ingestion import extract
 
 
-def suggest(title, mode=None):
-    if (mode or os.getenv("SARING_MODE", "demo")) == "demo":
-        if "support" in title.casefold():
-            names = ["handle complaints", "customer communication", "support documentation"]
-        elif any(x in title.casefold() for x in ("software", "developer", "engineer")):
-            names = ["Go backend development", "service testing", "version control"]
-        else:
-            names = [f"{title}: relevant practical experience", "Role-specific tools and methods", "Collaboration on a relevant project"]
-        return [{"name": name, "evidence": "Describe one personally handled example, contribution and outcome; a work sample or alternative is welcome.", "required": i < 2} for i,name in enumerate(names)]
-    key, model = os.getenv("OPENAI_API_KEY"), os.getenv("OPENAI_MODEL")
-    if not key or not model:
-        raise ValueError("Model not configured: set OPENAI_API_KEY and OPENAI_MODEL")
+def suggest(title):
+    from backend import ai_config
+    cfg = ai_config.config()
+    if not cfg:
+        raise ValueError("Model not configured: set a server model in Settings, or OPENAI_MODEL with its API key in the environment")
     client = OpenAI(
-        api_key=key,
-        base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-        timeout=30,
+        api_key=ai_config.api_key(cfg),
+        base_url=cfg["base_url"] or ai_config.DEFAULTS[cfg["provider"]],
+        timeout=ai_config.timeout(),
         max_retries=0,
     )
     response = client.chat.completions.create(
-        model=model,
+        model=cfg["model"],
         messages=[
             {
                 "role": "system",

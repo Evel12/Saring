@@ -40,65 +40,6 @@ class Title(BaseModel):
     title: str = Field(min_length=1, max_length=160)
 
 
-def demo_session(s, request):
-    org = m.Organization(name="Synthetic demo workspace", is_demo=True)
-    s.add(org)
-    s.flush()
-    user = m.User(
-        email=secrets.token_hex(16) + "@demo.invalid",
-        display_name="Demo recruiter",
-        password_hash=auth.passwords.hash(secrets.token_urlsafe(32)),
-    )
-    s.add(user)
-    s.flush()
-    s.add(m.Membership(org_id=org.id, user_id=user.id, role="admin"))
-    s.flush()
-    auth.login_session(s, request, org.id, user.id)
-    s.commit()
-    return org
-
-
-@router.post("/demo-session")
-def open_demo(request: Request, s=Depends(get_db)):
-    if auth.MODE != "demo":
-        raise HTTPException(404)
-    auth.rate_limit(request, "demo-create", 30)
-    try:
-        p = auth.principal(request, s)
-        if s.get(m.Organization, p.org_id).is_demo:
-            return {"mode": "demo", "csrf_token": request.session["csrf"]}
-    except HTTPException:
-        pass
-    org = demo_session(s, request)
-    return {
-        "mode": "demo",
-        "organization_id": org.id,
-        "csrf_token": request.session["csrf"],
-    }
-
-
-@router.post("/demo-reset")
-@router.post("/v1/demo/reset")
-def reset_demo(request: Request, p=Depends(auth.admin), s=Depends(get_db)):
-    if auth.MODE != "demo" or not s.get(m.Organization, p.org_id).is_demo:
-        raise HTTPException(403, "Only an isolated demo workspace can be reset")
-    auth.rate_limit(request, "demo-reset", 10, identity=p.org_id)
-    old_org, old_user = p.org_id, p.user_id
-    private_files = list(s.scalars(select(m.Document.storage_key).where(m.Document.org_id == old_org, m.Document.synthetic == False)))
-    # Direct, scoped deletion is restricted to synthetic demo organizations.
-    for table in reversed(Base.metadata.sorted_tables):
-        if "org_id" in table.c:
-            s.execute(delete(table).where(table.c.org_id == old_org))
-    s.execute(delete(m.Organization).where(m.Organization.id == old_org))
-    s.execute(delete(m.User).where(m.User.id == old_user))
-    request.session.clear()
-    org = demo_session(s, request)
-    for key in private_files:
-        s.add(m.FileErasure(org_id=org.id, storage_key=key))
-    s.commit()
-    return {"organization_id": org.id, "csrf_token": request.session["csrf"]}
-
-
 def legacy_requirements(s, v):
     version = (
         s.get(m.RequirementVersion, v.active_requirement_version_id)
@@ -246,7 +187,7 @@ def cjson(s, a):
         "id": a.id,
         "name": c.display_name,
         "file": docs[0].original_name if docs else "No document",
-        "has_document": bool(docs and not docs[0].synthetic),
+        "has_document": bool(docs),
         "evidence": evidence,
         "questions": questions(s, a),
         "status": (
@@ -391,13 +332,6 @@ def state(id: str, p=Depends(auth.recruiter), s=Depends(get_db)):
     }
 
 
-@router.post("/vacancies/{id}/seed")
-def seed(id: str, p=Depends(auth.recruiter), s=Depends(get_db)):
-    svc.seed_applicants(s, p, svc.own(s, m.Vacancy, id, p))
-    s.commit()
-    return {"ok": True}
-
-
 @router.post("/vacancies/{id}/run")
 def run(id: str, p=Depends(auth.recruiter), s=Depends(get_db)):
     row = svc.create_run(s, p, svc.own(s, m.Vacancy, id, p))
@@ -516,7 +450,7 @@ def portal(token: str, request: Request, s=Depends(get_db)):
             }
             for q in qs
         ],
-        "mode": auth.MODE,
+        "mode": "live",
     }
 
 

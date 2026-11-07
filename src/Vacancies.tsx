@@ -53,33 +53,6 @@ export function Vacancies() {
               <Plus size={15} />
               Create vacancy
             </a>
-            {org.is_demo && (
-              <button className="secondary" disabled={busy} onClick={() => perform(async () => {
-                const result = await post<{vacancy_ids:string[]}>("/demo/workspace", {});
-                navigate("/vacancies/" + result.vacancy_ids[0]);
-              }, "Two sample vacancies and five synthetic candidates loaded. Files use real parsers; model and coordination are simulated.")}>Explore complete demo</button>
-            )}
-            {org.is_demo && (
-              <button className="secondary" disabled={busy} onClick={() => perform(async () => {
-                const example = await post<{vacancy_id: string}>("/demo/clarification-example", {});
-                navigate("/vacancies/" + example.vacancy_id);
-              }, "Synthetic Customer Support example loaded. Run the agent to start clarification.")}>Load clarification example</button>
-            )}
-            {org.is_demo && (
-              <button
-                className="secondary"
-                disabled={busy}
-                onClick={() =>
-                  perform(
-                    () => post("/demo/sample-vacancies"),
-                    "Sample vacancies loaded as drafts.",
-                  )
-                }
-              >
-                <BriefcaseBusiness size={14} />
-                Load sample vacancies
-              </button>
-            )}
           </>
         }
       />
@@ -125,11 +98,6 @@ export function Vacancies() {
                           {v.state}
                         </Badge>
                       </div>
-                      {v.is_sample && (
-                        <div className="sample-label">
-                          SYNTHETIC SAMPLE VACANCY
-                        </div>
-                      )}
                       <h2>
                         <a href={"#/vacancies/" + v.id}>{v.title}</a>
                       </h2>
@@ -175,12 +143,6 @@ export function Vacancies() {
               </div>
             </>
           )
-        )}
-        {org.is_demo && (
-          <p className="hint">
-            Samples are isolated synthetic records. Creating a custom vacancy
-            never labels it as a sample, even if you use a starter template.
-          </p>
         )}
       </div>
     </>
@@ -525,9 +487,8 @@ function WizardForm({
                 <div>
                   <b>Assistance, with your judgment</b>
                   <p>
-                    {org.is_demo
-                      ? "Demo suggestions are deterministic synthetic examples."
-                      : "AI suggestions require a configured server-side provider. You can always write criteria manually."}
+                    AI suggestions require a configured server-side provider.
+                    You can always write criteria manually.
                   </p>
                 </div>
                 <button
@@ -539,27 +500,16 @@ function WizardForm({
                       async () => {
                         const result = await post<{
                           requirements: CriterionInput[];
-                        }>(
-                          org.is_demo
-                            ? "/demo/requirements/suggest"
-                            : "/requirements/suggest",
-                          { title },
-                        );
+                        }>("/requirements/suggest", { title });
                         setCriteria(result.requirements);
                         setSuggested(true);
                       },
-                      org.is_demo
-                        ? "Demo suggestions loaded. Review every criterion."
-                        : "AI suggestions loaded for HR review.",
+                      "AI suggestions loaded for HR review.",
                     )
                   }
                 >
                   <Sparkles size={13} />
-                  {busy
-                    ? "Requesting…"
-                    : org.is_demo
-                      ? "Suggest criteria · DEMO"
-                      : "Suggest criteria"}
+                  {busy ? "Requesting…" : "Suggest criteria"}
                 </button>
               </div>
               {suggested && (

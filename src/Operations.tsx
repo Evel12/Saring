@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
   CalendarDays,
   Check,
+  Cpu,
   Link2,
   RefreshCw,
   ShieldCheck,
@@ -31,13 +32,174 @@ import type {
   Interview,
   Outbox,
 } from "./types";
+import type { AiConfig } from "./types";
+
+const MODEL_PROVIDER_OPTIONS = {
+  openai: {
+    label: "OpenAI-compatible API",
+    default: "https://api.openai.com/v1",
+    hint: "Uses OPENAI_API_KEY from the server environment.",
+  },
+  ollama: {
+    label: "Ollama (local)",
+    default: "http://localhost:11434/v1",
+    hint: "No extra settings or API key: connects to your local Ollama automatically.",
+  },
+} as const;
+
+function AiModelCard() {
+  const { me, health, revision, refresh, perform, busy } = useApp();
+  const [provider, setProvider] = useState<"openai" | "ollama">("openai");
+  const [baseUrl, setBaseUrl] = useState("");
+  const [model, setModel] = useState("");
+  const [models, setModels] = useState<string[]>([]);
+  const q = useLoad(
+    (signal) =>
+      me.role === "admin"
+        ? request<AiConfig>("/ai/config", { signal })
+        : Promise.resolve(undefined),
+    [me.role, revision],
+  );
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (!q.data || seeded.current) return;
+    seeded.current = true;
+    setProvider(q.data.provider === "ollama" ? "ollama" : "openai");
+    setBaseUrl(q.data.base_url);
+    setModel(q.data.model);
+    setModels(q.data.model ? [q.data.model] : []);
+  }, [q.data]);
+  if (me.role !== "admin")
+    return (
+      <div className="notice">
+        <Cpu size={17} />
+        <p>
+          Model configuration is visible to organization admins only; check
+          with an admin which provider and model this workspace uses.
+        </p>
+      </div>
+    );
+  if (q.loading && !q.data) return <Loading label="Checking model configuration…" />;
+  if (q.error) return <Failed error={q.error} retry={q.reload} />;
+  const choice = MODEL_PROVIDER_OPTIONS[provider];
+  const chooseProvider = async (next: "openai" | "ollama") => {
+    if (next === provider) return;
+    setProvider(next);
+    setModel("");
+    setModels([]);
+    if (baseUrl === MODEL_PROVIDER_OPTIONS[provider].default)
+      setBaseUrl(MODEL_PROVIDER_OPTIONS[next].default);
+    try {
+      const params = new URLSearchParams({ provider });
+      if (next === "openai" && baseUrl.trim())
+        params.set("base_url", baseUrl.trim());
+      const result = await request<{ models: string[] }>("/ai/models?" + params);
+      setModels(result.models);
+      if (result.models.length)
+        setModel(result.models[0]);
+    } catch {
+      // Keep model list empty; user can retry with “Browse models”.
+    }
+  };
+  const browse = () =>
+    perform(async () => {
+      const params = new URLSearchParams({ provider });
+      if (provider === "openai" && baseUrl.trim())
+        params.set("base_url", baseUrl.trim());
+      const result = await request<{ models: string[] }>("/ai/models?" + params);
+      setModels(result.models);
+      if (result.models.length && !result.models.some((m) => m === model))
+        setModel(result.models[0]);
+    }, "Model list refreshed from the provider.");
+  const save = () =>
+    perform(async () => {
+      await post("/ai/config", {
+        provider,
+        model: model.trim(),
+        base_url: provider === "openai" ? baseUrl.trim() || undefined : undefined,
+      });
+      refresh();
+      q.reload();
+    }, "AI model saved; the server and worker use it for the next request.");
+  return (
+    <div className="round-card">
+      <h3>AI model</h3>
+      <Badge tone={health.model === "configured" ? "green" : "amber"}>
+        {health.provider && health.provider !== "none"
+          ? words(health.provider) +
+            (health.model_name ? " · " + health.model_name : "")
+          : health.model}
+      </Badge>
+      <p className="hint">
+        Provider, endpoint and model used for analysis, criteria suggestions
+        and clarification. Saved server-side without secrets; workers read the
+        same configuration. A saved selection is not proof of a successful
+        model call.
+      </p>
+      <label>
+        Provider
+        <select value={provider} onChange={(e) => chooseProvider(e.target.value as "openai" | "ollama")}>
+          <option value="openai">{MODEL_PROVIDER_OPTIONS.openai.label}</option>
+          <option value="ollama">{MODEL_PROVIDER_OPTIONS.ollama.label}</option>
+        </select>
+      </label>
+      <p className="tiny">{choice.hint}</p>
+      {provider === "openai" ? (
+        <label>
+          Endpoint base URL
+          <input
+            maxLength={500}
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder={choice.default}
+          />
+        </label>
+      ) : (
+        <p className="tiny">
+          No additional settings: the server connects to Ollama at
+          http://localhost:11434/v1 automatically.
+        </p>
+      )}
+      <label>
+        Model
+        <input
+          required
+          maxLength={200}
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+          placeholder={models.length ? models[0] : "e.g. qwen:latest — type a name or click “Browse models”"}
+          list="ai-model-options"
+        />
+      </label>
+      <datalist id="ai-model-options">
+        {models.map((m) => (
+          <option key={m} value={m} />
+        ))}
+      </datalist>
+      <p className="tiny">
+        {q.data?.source === "server"
+          ? "Currently using the saved server configuration."
+          : q.data?.source === "environment"
+            ? "Currently using OPENAI_MODEL from the server environment."
+            : "No model selected yet."}
+      </p>
+      <button type="button" className="secondary" disabled={busy} onClick={browse}>
+        <RefreshCw size={13} />
+        Browse models
+      </button>
+      <button className="primary" disabled={busy || !model.trim()} onClick={save}>
+        <Check size={13} />
+        Save AI model
+      </button>
+    </div>
+  );
+}
 
 export function Settings() {
   const { me, org, health, revision, perform, busy, signOut } = useApp();
   const [provider, setProvider] = useState("google_calendar");
   const [calendar, setCalendar] = useState("primary");
   const [fromEmail, setFromEmail] = useState("");
-  const [reset, setReset] = useState(false);
   const oauth=useLoad(signal=>me.role==="admin"?request<{state:string;detail?:string}>("/oauth/google/status",{signal}):Promise.resolve(null),[revision,me.role]);
   const q = useLoad(
     (signal) =>
@@ -69,9 +231,7 @@ export function Settings() {
                 {["google_calendar", "openai", "email"].map((name) => {
                   const c = q.data?.find((c) => c.provider === name);
                   const status =
-                    org.is_demo
-                        ? "Deterministic demo adapter"
-                        : name === "openai" ? health.model : c?.state || "not_configured";
+                    name === "openai" ? health.model : c?.state || "not_configured";
                   return (
                     <div className="integration-row" key={name}>
                       <span className="summary-icon">
@@ -88,10 +248,8 @@ export function Settings() {
                         <p>
                           {name === "email"
                             ? "Resend adapter for separately approved clarification and interview messages. Provider acceptance is not confirmed inbox delivery."
-                            : name === "openai" && !org.is_demo
-                              ? "Configured by OPENAI_API_KEY, OPENAI_MODEL and OPENAI_BASE_URL in the API and worker environment. Configuration is not proof of a successful model call."
-                            : org.is_demo
-                              ? "No real service is called by the demo workflow."
+                            : name === "openai"
+                              ? "Server-level model selection for analysis, suggestions and clarification. Admins choose provider (including local Ollama), endpoint and model in the AI model card below; credentials never pass through the browser. Configuration is not proof of a successful model call."
                               : c
                                 ? "Saved organization connection; credentials remain server-side."
                                 : "No organization connection record exists."}
@@ -103,14 +261,22 @@ export function Settings() {
                               .join(" · ") || "No non-secret options"}
                           </small>
                         )}
+                        {name === "openai" &&
+                          health.provider &&
+                          health.provider !== "none" && (
+                            <small className="mono">
+                              {health.provider}
+                              {health.model_name
+                                ? " · " + health.model_name
+                                : ""}
+                            </small>
+                          )}
                       </div>
                       <Badge
                         tone={
-                          org.is_demo
-                            ? "amber"
-                            : status === "configured"
-                              ? "green"
-                              : "amber"
+                          status === "configured"
+                            ? "green"
+                            : "amber"
                         }
                       >
                         {words(status)}
@@ -123,11 +289,12 @@ export function Settings() {
                   <p>
                     Configuration records are not proof that a provider call
                     succeeded. Calendar and messaging actions keep their
-                    persisted result: queued, completed, simulated, failed or
+                    persisted result: queued, completed, failed or
                     not configured.
                   </p>
                 </div>
-                <div className="round-card"><h3>Google Calendar OAuth</h3><Badge>{oauth.data?.state || "disconnected"}</Badge>{oauth.error&&<Failed error={oauth.error} retry={oauth.reload}/>}<p className="hint">Access is limited to availability and events on calendars owned by the connected account. Tokens stay encrypted on the server. Interviewer calendars must be accessible for free/busy queries.</p><button className="secondary" disabled={busy} onClick={()=>perform(async()=>{const result=await post<{authorization_url:string|null}>("/oauth/google/start",{});if(result.authorization_url)window.location.assign(result.authorization_url);},"Calendar connection request processed. DEMO uses a synthetic adapter.")}>Connect Google Calendar</button><button className="secondary" disabled={busy||org.is_demo} onClick={()=>perform(()=>post("/oauth/google/disconnect",{}),"Google Calendar disconnected locally. Check provider revocation status separately.")}>Disconnect Google Calendar</button></div>
+                <AiModelCard />
+                <div className="round-card"><h3>Google Calendar OAuth</h3><Badge>{oauth.data?.state || "disconnected"}</Badge>{oauth.error&&<Failed error={oauth.error} retry={oauth.reload}/>}<p className="hint">Access is limited to availability and events on calendars owned by the connected account. Tokens stay encrypted on the server. Interviewer calendars must be accessible for free/busy queries.</p><button className="secondary" disabled={busy} onClick={()=>perform(async()=>{const result=await post<{authorization_url:string|null}>("/oauth/google/start",{});if(result.authorization_url)window.location.assign(result.authorization_url);},"Calendar connection request processed.")}>Connect Google Calendar</button><button className="secondary" disabled={busy} onClick={()=>perform(()=>post("/oauth/google/disconnect",{}),"Google Calendar disconnected locally. Check provider revocation status separately.")}>Disconnect Google Calendar</button></div>
                 <h3>Save non-secret connection configuration</h3>
                 <form
                   onSubmit={(e) => {
@@ -166,7 +333,7 @@ export function Settings() {
                       />
                     </label>
                   )}
-                  <p className="hint">Model selection and credentials are configured in the server environment; this form changes calendar and email options only.</p>
+                  <p className="hint">Model selection moved to the AI model card above for admins; this form changes calendar and email options only.</p>
                   {provider === "email" && <label>Verified sender email<input type="email" required value={fromEmail} onChange={e=>setFromEmail(e.target.value)} placeholder="recruitment@example.com"/></label>}
                   <button className="primary" disabled={busy}>
                     Save connection options
@@ -191,15 +358,15 @@ export function Settings() {
               <div className="settings-details">
                 <div>
                   <span>Workspace data</span>
-                  <b>
-                    {org.is_demo
-                      ? "Synthetic DEMO"
-                      : "Authenticated organization"}
-                  </b>
+                  <b>Authenticated organization</b>
                 </div>
                 <div>
                   <span>Suggestion adapter</span>
-                  <b>{org.is_demo ? "Deterministic demo" : health.model}</b>
+                  <b>
+                    {health.model_name
+                      ? health.provider + ": " + health.model_name
+                      : health.model}
+                  </b>
                 </div>
                 <div>
                   <span>API schema</span>
@@ -219,44 +386,8 @@ export function Settings() {
               </button>
             </div>
           </Panel>
-          {org.is_demo && (
-            <Panel title="Isolated demo reset">
-              <div className="panel-body">
-                <p>
-                  Reset only your synthetic organization. Other demo visitors
-                  and real organizations are unaffected.
-                </p>
-                <button
-                  className="secondary danger"
-                  onClick={() => setReset(true)}
-                >
-                  Review sandbox reset
-                </button>
-              </div>
-            </Panel>
-          )}
         </div>
       </div>
-      {reset && (
-        <Confirm
-          title="Reset your synthetic sandbox?"
-          description={
-            <p>
-              This removes only this demo workspace’s synthetic vacancies,
-              applications, drafts and history. It rotates to a new isolated
-              demo session.
-            </p>
-          }
-          label="Reset my demo sandbox"
-          close={() => setReset(false)}
-          confirm={() =>
-            perform(async () => {
-              await post("/demo/reset");
-              location.assign("/");
-            }, "Demo sandbox reset.")
-          }
-        />
-      )}
     </>
   );
 }
@@ -298,9 +429,8 @@ export function CalendarView() {
         <div className="notice">
           <CalendarDays size={18} />
           <p>
-            {org.is_demo
-              ? "DEMO bookings are simulated records. No real calendar or candidate inbox is touched."
-              : "Live availability and event creation require organization calendar credentials. A queued action is not a confirmed booking."}
+            Live availability and event creation require organization calendar
+            credentials. A queued action is not a confirmed booking.
           </p>
         </div>
         {q.loading && !q.data ? (
@@ -361,17 +491,9 @@ export function CalendarView() {
                             </p>
                             <div className="tags">
                               <Badge
-                                tone={
-                                  i.state === "simulated"
-                                    ? "amber"
-                                    : i.state === "booked"
-                                      ? "green"
-                                      : ""
-                                }
+                                tone={i.state === "booked" ? "green" : ""}
                               >
-                                {i.state === "simulated"
-                                  ? "DEMO simulated booking"
-                                  : words(i.state)}
+                                {words(i.state)}
                               </Badge>
                               {action && (
                                 <Badge
@@ -456,9 +578,7 @@ export function Metrics() {
     jobs_queued: "Queued jobs",
     jobs_failed: "Failed jobs",
     outbox_blocked: "Unconfigured actions",
-    interviews_booked: org.is_demo
-      ? "Simulated interviews"
-      : "Booked interviews",
+    interviews_booked: "Booked interviews",
   };
   return (
     <>

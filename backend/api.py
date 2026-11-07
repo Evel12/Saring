@@ -137,8 +137,6 @@ def memberships(pg=Depends(pagination), p=Depends(auth.admin), s=Depends(get_db)
 
 @router.post("/memberships", response_model=d.MembershipOut, status_code=201)
 def member_create(body: d.MemberInput, p=Depends(auth.admin), s=Depends(get_db)):
-    if s.get(m.Organization, p.org_id).is_demo:
-        raise HTTPException(403, "Demo membership changes are disabled")
     user = s.scalar(select(m.User).where(m.User.email == body.email.lower()))
     if not user:
         if not body.password:
@@ -167,8 +165,6 @@ def member_update(
     id: str, body: d.MemberPatch, p=Depends(auth.admin), s=Depends(get_db)
 ):
     member = svc.own(s, m.Membership, id, p)
-    if s.get(m.Organization, p.org_id).is_demo:
-        raise HTTPException(403, "Demo membership changes are disabled")
     if (
         member.role == "admin"
         and member.active
@@ -232,6 +228,54 @@ def vacancy_delete(id: str, p=Depends(auth.recruiter), s=Depends(get_db)):
     )
     s.commit()
     return {"ok": True}
+
+
+@router.post("/vacancies/{id}/apply-link")
+def apply_link_setup(
+    id: str,
+    body: d.ApplyLinkInput,
+    request: Request,
+    p=Depends(auth.recruiter),
+    s=Depends(get_db),
+):
+    """Create, rotate or disable the public apply link, and set its questions."""
+    v = svc.own(s, m.Vacancy, id, p)
+    if body.disable:
+        if body.rotate and not v.apply_token:
+            raise HTTPException(422, "This apply link is already disabled")
+        v.apply_token = None
+    elif body.rotate or not v.apply_token:
+        v.apply_token = secrets.token_urlsafe(24)
+    if body.questions is not None:
+        questions = []
+        for q in body.questions[:12]:
+            text = " ".join(str(q).split())[:300]
+            if text:
+                questions.append(text)
+        v.intro_questions = questions
+    s.commit()
+    # The client joins this relative path with its frontend origin.
+    return {
+        "vacancy_id": v.id,
+        "token": v.apply_token,
+        "enabled": bool(v.apply_token),
+        "questions": v.intro_questions or [],
+        "state": v.state,
+        "path": None if not v.apply_token else f"#/apply/{v.id}/{v.apply_token}",
+    }
+
+
+@router.get("/vacancies/{id}/apply-link")
+def apply_link_read(id: str, p=Depends(auth.recruiter), s=Depends(get_db)):
+    v = svc.own(s, m.Vacancy, id, p)
+    return {
+        "vacancy_id": v.id,
+        "token": v.apply_token,
+        "enabled": bool(v.apply_token) and v.state == "published",
+        "questions": v.intro_questions or [],
+        "state": v.state,
+        "path": None if not v.apply_token else f"#/apply/{v.id}/{v.apply_token}",
+    }
 
 
 @router.post(
@@ -331,8 +375,6 @@ def download(s, p, id, application_id=None):
     doc = svc.own(s, m.Document, id, p)
     if application_id and doc.application_id != application_id:
         raise HTTPException(404, "Document not found")
-    if doc.synthetic:
-        raise HTTPException(404, "Synthetic document has no original file")
     root = Path(os.getenv("STORAGE_ROOT", "storage")).resolve()
     path = (root / doc.storage_key).resolve()
     if path.parent != root or not path.is_file():
@@ -393,6 +435,164 @@ def finding_revise(
     revision = svc.revise_finding(s, p, svc.own(s, m.Application, id, p), body)
     s.commit()
     return svc.public(revision)
+
+
+@router.post("/applications/{id}/link-verification")
+def link_verification(id: str, body: d.LinkCheckInput, p=Depends(auth.recruiter), s=Depends(get_db)):
+    a = svc.own(s, m.Application, id, p)
+    from backend import linkcheck
+    try:
+        observation = linkcheck.observe(body.url)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    if observation["state"] in ("not_found", "unreachable", "manual"):
+        message = "Public link verification attempted on " + body.url + "; " + observation["message"]
+    else:
+        message = "Public link observed for recruiter review, never as an automated judgment: " + body.url
+    svc.event(s, p, "link.observed", message, a.vacancy_id, a.id,
+        details={"tool": "link_check", "result": observation["state"][:80]})
+    s.commit()
+    return observation
+
+
+@router.post("/applications/{id}/links/review")
+def application_link_review(id: str, body: d.LinkCheckInput, p=Depends(auth.recruiter), s=Depends(get_db)):
+    """Open one public link, harvest its readable text and return an
+    AI-assisted description of the page against the CV evidence."""
+    a = svc.own(s, m.Application, id, p)
+    from backend import linkcheck, analysis
+    if len(body.url) > 500 or not body.url.startswith("https://"):
+        raise HTTPException(422, "Provide an https link of at most 500 characters")
+    try:
+        harvested = linkcheck.harvest(body.url)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    except Exception as exc:  # httpx errors and network failures
+        raise HTTPException(422, "The link could not be opened: " + str(type(exc).__name__))
+    review = ""
+    try:
+        evidence = [
+            e.passage for e in s.scalars(select(m.EvidenceItem).where(
+                m.EvidenceItem.org_id == a.org_id, m.EvidenceItem.application_id == a.id))
+            if svc.usable_evidence(s, e)
+        ]
+        review = analysis.review_link(harvested["url"], harvested.get("text", ""),
+            harvested.get("title", ""), evidence)
+    except analysis.AnalysisError as exc:
+        # Harvesting still succeeded; give the recruiter an honest partial
+        # result instead of only an error string.
+        review = ("AI-assisted review could not be produced (the local model echoed the request or refused). "
+            "The page itself was opened: title '" + (harvested.get("title", "")[:120] or "untitled") + "' — "
+            "review its content manually. (" + str(exc)[:160] + ")")
+    harvested["review"] = review
+    if review and not review.startswith("AI-assisted review could not be produced"):
+        row = m.AnalysisInsight(org_id=a.org_id, application_id=a.id,
+            kind="link", text=harvested["url"],
+            payload={"state": harvested["state"], "title": harvested.get("title", ""),
+                     "status_code": harvested.get("status_code"), "review": review})
+        s.add(row)
+        svc.event(s, p, "link.reviewed", "AI-assisted public link review recorded; never a judgment of expertise: " + harvested["url"],
+            a.vacancy_id, a.id,
+            details={"tool": "link_review", "result": harvested["state"], "url": harvested["url"]})
+        s.commit()
+    return harvested
+
+
+@router.post("/applications/{id}/summary")
+def application_summary(id: str, p=Depends(auth.recruiter), s=Depends(get_db)):
+    a = svc.own(s, m.Application, id, p)
+    from backend.analysis import AnalysisError, summarize
+    evidence = [
+        e for e in s.scalars(select(m.EvidenceItem).where(
+            m.EvidenceItem.org_id == a.org_id, m.EvidenceItem.application_id == a.id,
+            m.EvidenceItem.extraction_version_id.is_not(None)))
+        if svc.usable_evidence(s, e)
+    ]
+    if not evidence:
+        raise HTTPException(422, "No processed source evidence yet; run the review first")
+    try:
+        summary = summarize([e.passage for e in evidence])
+    except AnalysisError as exc:
+        raise HTTPException(422, str(exc))
+    # The text stays out of persisted payloads: display only, deciding nothing.
+    svc.event(s, p, "summary.generated", "Neutral background summary displayed from linked evidence; persisted nowhere.", a.vacancy_id, a.id)
+    s.commit()
+    return {"summary": summary}
+
+
+@router.get("/applications/{id}/insights")
+def application_insights(id: str, p=Depends(auth.recruiter), s=Depends(get_db)):
+    """Persisted AI findings page data: summary, strengths, details, link checks."""
+    a = svc.own(s, m.Application, id, p)
+    rows = list(s.scalars(
+        select(m.AnalysisInsight).where(
+            m.AnalysisInsight.org_id == a.org_id,
+            m.AnalysisInsight.application_id == a.id,
+        ).order_by(m.AnalysisInsight.created_at)
+    ))
+    links: dict = {}
+    strengths: list = []
+    details: list = []
+    summary = None
+    seen_strengths: set[str] = set()
+    seen_details: set[str] = set()
+    for row in rows:
+        if row.kind == "summary":
+            # Skip trap rows: old junk replies ("[]", "Summary of CV data").
+            if len(row.text) < 60 and not row.text.startswith("Neutral source-grounded background"):
+                continue
+            # Rows arrive oldest-first; the newest valid row wins.
+            summary = row.text
+        elif row.kind == "strength":
+            norm = " ".join(row.text.split())
+            if norm and norm not in seen_strengths:
+                seen_strengths.add(norm)
+                strengths.append({"id": row.id, "text": row.text, "created_at": row.created_at})
+        elif row.kind == "detail":
+            norm = " ".join(row.text.split())
+            if norm and norm not in seen_details:
+                seen_details.add(norm)
+                details.append({"id": row.id, "text": row.text, "created_at": row.created_at})
+        elif row.kind == "link":
+            # A newer observation for the same URL supersedes the stored one.
+            raw_review = str(row.payload.get("review", "") or "")
+            if raw_review.lstrip().startswith("{") and "page_text" in raw_review:
+                # An old model-echo artifact is not a review; hide it.
+                raw_review = ""
+            links[row.text] = {
+                "id": row.id, "url": row.text, "created_at": row.created_at,
+                **{"state": row.payload.get("state", "manual"),
+                   "title": row.payload.get("title", ""),
+                   "message": row.payload.get("message", ""),
+                   "status_code": row.payload.get("status_code"),
+                   "review": raw_review,
+                   "subject": row.payload.get("subject", ""),
+                   "primary_language": row.payload.get("primary_language", ""),
+                   "languages": row.payload.get("languages", ""),
+                   "public_repositories": row.payload.get("public_repositories"),
+                   "last_public_commit_utc": row.payload.get("last_public_commit_utc", ""),
+                   "fork": row.payload.get("fork")},
+            }
+    return {"application_id": a.id, "summary": summary,
+            "strengths": strengths[:8], "relevant_details": details[:10], "links": list(links.values())}
+
+
+@router.post("/applications/{id}/links/verify")
+def application_link_verify(id: str, body: d.LinkCheckInput, p=Depends(auth.recruiter), s=Depends(get_db)):
+    """Re-verify one link on demand and record the fresh observation."""
+    a = svc.own(s, m.Application, id, p)
+    from backend import linkcheck
+    try:
+        observation = linkcheck.observe(body.url, allow_generic=True)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    row = m.AnalysisInsight(org_id=a.org_id, application_id=a.id,
+        kind="link", text=observation["url"], payload=dict(observation))
+    s.add(row)
+    svc.event(s, p, "link.observed", "Recruiter re-verified a public link from linked evidence: " + observation["url"],
+        a.vacancy_id, a.id, details={"tool": "link_check", "result": observation.get("state", "")[:80], "url": observation["url"]})
+    s.commit()
+    return observation
 
 
 @router.get("/findings/{id}/revisions", response_model=d.Page[d.RevisionDetailOut])
@@ -509,7 +709,6 @@ def candidate_application(id: str, p=Depends(auth.candidate), s=Depends(get_db))
             if round and round.state == "approved"
             else "received" if a.review_state == "pending" else "in_recruiter_review"
         ),
-        "demo": s.get(m.Organization, p.org_id).is_demo,
         "profile": {
             "display_name": s.get(m.Candidate, a.candidate_id).display_name,
             "email": s.get(m.Candidate, a.candidate_id).email,
@@ -692,11 +891,9 @@ def connection_create(
     row.config = {**body.config,**binding}
     row.credential_ref = ref
     row.state = (
-        "demo"
-        if s.get(m.Organization, p.org_id).is_demo
-        else "configured" if os.getenv(ref) else "not_configured"
+        "configured" if os.getenv(ref) else "not_configured"
     )
-    if body.provider=="google_calendar" and not s.get(m.Organization,p.org_id).is_demo:
+    if body.provider == "google_calendar":
         saved=s.scalar(select(m.OAuthCredential).where(m.OAuthCredential.connection_id==row.id)) if row.id else None
         row.state="connected" if saved and not saved.revoked_at else "disconnected"
     s.commit()
@@ -948,10 +1145,3 @@ def metric_history(
     pg=Depends(pagination), p=Depends(auth.recruiter), s=Depends(get_db)
 ):
     return svc.page(s, m.Metric, p, **pg)
-
-
-@router.post("/demo/vacancies/{id}/seed")
-def seed(id: str, p=Depends(auth.recruiter), s=Depends(get_db)):
-    svc.seed_applicants(s, p, svc.own(s, m.Vacancy, id, p))
-    s.commit()
-    return {"ok": True}

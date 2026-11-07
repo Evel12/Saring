@@ -1,10 +1,11 @@
 """Persisted UI operations. Candidate writes remain bound to invitation scopes."""
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Query
-from sqlalchemy import select, func, or_, and_, delete
-from pydantic import Field
 from typing import Literal
-from backend import api, auth, models as m, schemas as d, services as svc
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
+from pydantic import Field
+from sqlalchemy import select, func, or_, and_, delete
+from backend import api, auth, ai_config, models as m, schemas as d, services as svc
 from backend.db import get_db, now
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(api.mutations)])
@@ -29,36 +30,6 @@ class SuggestInput(d.Input):
     title: str = Field(min_length=1, max_length=160)
 
 
-class FixtureInput(d.Input):
-    variant: Literal["support", "developer", "scan", "unreadable", "hostile"]
-
-
-@router.post("/demo/vacancies/{id}/synthetic-file", status_code=201)
-def synthetic_file(id: str, body: FixtureInput, p=Depends(auth.recruiter), s=Depends(get_db)):
-    from backend.demo_files import applicant, attach
-    if not s.get(m.Organization, p.org_id).is_demo:
-        raise HTTPException(403, "Synthetic fixtures are demo-only")
-    v = svc.own(s, m.Vacancy, id, p)
-    index = ["support", "developer", "scan", "unreadable", "hostile"].index(body.variant)
-    email = f"synthetic-{index}@example.test"
-    existing = s.scalar(select(m.Application).join(m.Candidate, m.Candidate.id == m.Application.candidate_id).where(
-        m.Application.org_id == p.org_id, m.Application.vacancy_id == id, m.Candidate.email == email, m.Candidate.synthetic == True))
-    a = existing or applicant(s, p, v, body.variant, index)
-    if existing:
-        attach(s, p, a, body.variant)
-    s.commit()
-    return {"application_id": a.id, "variant": body.variant, "parsing": "real", "analysis": "deterministic_demo"}
-
-
-@router.post("/demo/applications/{id}/replacement-file", status_code=201)
-def replacement_file(id: str, body: FixtureInput, p=Depends(auth.recruiter), s=Depends(get_db)):
-    from backend.demo_files import attach
-    a = svc.own(s, m.Application, id, p)
-    row = attach(s, p, a, body.variant)
-    s.commit()
-    return svc.public(row)
-
-
 class ExcludeInput(d.Input):
     reason: str = Field(min_length=5, max_length=500)
 
@@ -74,29 +45,6 @@ def exclude_document(id: str, body: ExcludeInput, p=Depends(auth.recruiter), s=D
         svc.event(s, p, "document.excluded", "Recruiter excluded an original from future analysis; original/history retained. Reanalysis is required.", a.vacancy_id, a.id)
     s.commit()
     return svc.public(document)
-
-
-@router.post("/demo/workspace", status_code=201)
-def exploration_workspace(p=Depends(auth.recruiter), s=Depends(get_db)):
-    from backend.demo_files import applicant
-    if not s.get(m.Organization, p.org_id).is_demo:
-        raise HTTPException(403, "Synthetic workspace is demo-only")
-    created = []
-    for title, criteria, variant in [
-        ("Customer Support · sample", ["handle complaints", "customer communication", "support documentation"], "support"),
-        ("Software Developer · sample", ["Go backend development", "Provide a code sample or alternative walkthrough", "service testing"], "developer")]:
-        v = s.scalar(select(m.Vacancy).where(m.Vacancy.org_id == p.org_id, m.Vacancy.title == title, m.Vacancy.is_sample == True, m.Vacancy.deleted_at.is_(None)))
-        if not v:
-            v = svc.create_vacancy(s, p, d.VacancyInput(title=title, description="Isolated synthetic exploration. Real DOCX/PDF extraction; deterministic model and communication adapters.", requirements=[d.RequirementInput(description=name, importance="essential" if i<2 else "preferred", acceptable_evidence_types=["document", "candidate_report", "work_sample"] if i != 1 or variant != "developer" else ["work_sample"], minimum_observable_expectation="Describe a personally handled example, contribution and outcome; alternatives are welcome.", clarification_permitted=True) for i,name in enumerate(criteria)]))
-            v.is_sample = True
-            version = s.scalar(select(m.RequirementVersion).where(m.RequirementVersion.vacancy_id == v.id))
-            svc.approve_version(s, p, version.id, "Explicit synthetic sample criteria; humans still approve clarification and interview contact.")
-            svc.change_vacancy(s, p, v, d.VacancyPatch(state="published"))
-            for i in range(5):
-                applicant(s, p, v, "hostile" if i == 3 else variant, i)
-        created.append(v.id)
-    s.commit()
-    return {"vacancy_ids": created, "synthetic_candidates": 5, "applications_per_vacancy": 5}
 
 
 class CorrectionAnswerInput(d.Input):
@@ -117,16 +65,6 @@ def clarification_workflow(id: str, p=Depends(auth.recruiter), s=Depends(get_db)
         "responses": [svc.public(x) for x in s.scalars(select(m.ClarificationResponse).join(m.ClarificationQuestion, m.ClarificationQuestion.id == m.ClarificationResponse.question_id).where(m.ClarificationResponse.application_id == id, m.ClarificationQuestion.round_id == row.round_id))]}
 
 
-@router.get("/demo/clarification-mailbox")
-def clarification_mailbox(application_id: str, p=Depends(auth.recruiter), s=Depends(get_db)):
-    from backend.clarification import portal_link
-    if not s.get(m.Organization, p.org_id).is_demo:
-        raise HTTPException(403, "Synthetic mailbox is demo-only")
-    svc.own(s, m.Application, application_id, p)
-    rows = s.scalars(select(m.OutboxAction).where(m.OutboxAction.org_id == p.org_id, m.OutboxAction.application_id == application_id, m.OutboxAction.state == "simulated").order_by(m.OutboxAction.created_at))
-    return {"items": [{"id": r.id, "kind": r.kind, "created_at": r.created_at, "portal_url": portal_link(r.payload["invitation_id"]), "questions": r.payload.get("questions", [])} for r in rows if r.payload.get("invitation_id")]}
-
-
 @router.post("/applications/{id}/clarification-workflow/retry")
 def retry_clarification_update(id: str, p=Depends(auth.recruiter), s=Depends(get_db)):
     from backend.clarification import workflow_for
@@ -142,6 +80,35 @@ def retry_clarification_update(id: str, p=Depends(auth.recruiter), s=Depends(get
     svc.event(s, p, "clarification.retry", "Recruiter retried the persisted evidence update; no new questions or email authorized.", a.vacancy_id, a.id)
     s.commit()
     return {"ok": True}
+
+
+@router.get("/findings/{id}/suggest-evidence")
+def suggest_evidence(id: str, p=Depends(auth.recruiter), s=Depends(get_db)):
+    """Deterministic, model-free passage suggestions for a criterion.
+
+    Pure keyword-overlap ranking (the same ranker the worker uses for its
+    shortlist). Helps a recruiter finish a Revise judgment without another
+    AI call; suggestions are candidate-reported passages for human review.
+    """
+    from backend import analysis
+    finding = svc.own(s, m.Finding, id, p)
+    a = svc.own(s, m.Application, finding.application_id, p)
+    requirement = next((r for r in svc.requirements(s, a.requirement_version_id)
+        if r.id == finding.requirement_id), None)
+    if not requirement:
+        raise HTTPException(404, "The finding's requirement version is not the active one")
+    evidence = list(s.scalars(select(m.EvidenceItem).where(
+        m.EvidenceItem.org_id == p.org_id, m.EvidenceItem.application_id == a.id)))
+    ranked = analysis.relevance_rank(
+        {"description": requirement.description,
+         "minimum_observable_expectation": requirement.minimum_observable_expectation},
+        [{"id": e.id, "passage": e.passage} for e in evidence])
+    ids = [e["id"] for e, _ in ranked]
+    by_id = {e.id: e for e in evidence}
+    return {"suggestions": [
+        {"id": e.id, "passage": e.passage, "overlap": score, "page": e.page,
+         "paragraph": e.paragraph, "document_id": e.document_id}
+        for (e, score), eid in zip(ranked, ids) if by_id.get(eid)]}
 
 
 @router.post("/candidate/applications/{id}/answer-corrections", status_code=201)
@@ -185,24 +152,6 @@ def submission_receipt(id: str, p=Depends(auth.submission_candidate), s=Depends(
     if not submission:
         raise HTTPException(404, "No submitted answers")
     return {"application_id": id, "submitted_at": submission.created_at, "responses": [{"id": r.id, "question_id": r.question_id, "text": r.text} for r in s.scalars(select(m.ClarificationResponse).join(m.ClarificationQuestion, m.ClarificationQuestion.id == m.ClarificationResponse.question_id).where(m.ClarificationResponse.application_id == id, m.ClarificationQuestion.round_id == inv.round_id))]}
-
-
-@router.post("/demo/clarification-example", status_code=201)
-def clarification_example(p=Depends(auth.recruiter), s=Depends(get_db)):
-    if not s.get(m.Organization, p.org_id).is_demo:
-        raise HTTPException(403, "Synthetic example is demo-only")
-    v = svc.create_vacancy(s, p, d.VacancyInput(title="Customer Support", description="Synthetic clarification example: a complaint-handling gap.", requirements=[d.RequirementInput(description="handle complaints", importance="essential", acceptable_evidence_types=["document", "candidate_report", "work_sample"], minimum_observable_expectation="Describe one personally handled complaint, actions and outcome.", clarification_permitted=True)]))
-    v.is_sample = True
-    version = s.scalar(select(m.RequirementVersion).where(m.RequirementVersion.vacancy_id == v.id))
-    svc.approve_version(s, p, version.id, "Recruiter loaded the explicitly synthetic demonstration criteria.")
-    svc.change_vacancy(s, p, v, d.VacancyPatch(state="published"))
-    a = svc.create_application(s, p, d.ApplicationInput(vacancy_id=v.id, display_name="Synthetic Support Applicant", email="support-applicant@example.test"), synthetic=True)
-    document = m.Document(org_id=p.org_id, application_id=a.id, original_name="synthetic_support_cv.pdf", storage_key="synthetic-" + a.id, media_type="application/pdf", size_bytes=0, sha256="0"*64, synthetic=True)
-    s.add(document)
-    s.flush()
-    s.add(m.ExtractionVersion(org_id=p.org_id, document_id=document.id, version=1, engine="synthetic-v1", passages=[{"page": 1, "paragraph": None, "text": "Experience: online shop administrator"}], limitations="Explicit synthetic demonstration; no real applicant file."))
-    s.commit()
-    return {"vacancy_id": v.id, "application_id": a.id}
 
 
 @router.get("/events/changes")
@@ -527,20 +476,17 @@ def recruiter_permissions(
     return svc.page(s, m.SourcePermission, p, application_id=id, **pg)
 
 
-def suggestion(body, p, s, demo):
-    org = s.get(m.Organization, p.org_id)
-    if demo and not org.is_demo:
-        raise HTTPException(403, "Demo adapter is synthetic-only")
+def suggestion(body, p, s):
     from backend.tools import suggest
 
     try:
-        result = suggest(body.title, mode="demo" if demo else "live")
+        result = suggest(body.title)
     except ValueError as e:
         raise HTTPException(503, str(e))
     except Exception:
         raise HTTPException(502, "Model provider failed; no criteria generated")
     return {
-        "adapter": "deterministic_demo" if demo else "live_provider",
+        "adapter": "live_provider",
         "requirements": [
             {
                 "description": r["name"],
@@ -560,65 +506,66 @@ def suggestion(body, p, s, demo):
 
 @router.post("/requirements/suggest")
 def suggest(body: SuggestInput, p=Depends(auth.recruiter), s=Depends(get_db)):
-    return suggestion(body, p, s, False)
+    return suggestion(body, p, s)
 
 
-@router.post("/demo/requirements/suggest")
-def demo_suggest(body: SuggestInput, p=Depends(auth.recruiter), s=Depends(get_db)):
-    return suggestion(body, p, s, True)
+class AiConfigInput(d.Input):
+    provider: Literal["openai", "ollama"]
+    model: str = Field(min_length=1, max_length=200)
+    base_url: str | None = Field(default=None, max_length=500)
 
 
-@router.post("/demo/sample-vacancies", status_code=201)
-def samples(p=Depends(auth.recruiter), s=Depends(get_db)):
-    if not s.get(m.Organization, p.org_id).is_demo:
-        raise HTTPException(403, "Sample adapter is synthetic-only")
-    titles = {
-        "Software Developer": ["Software development", "Testing", "Version control"],
-        "Customer Support": [
-            "Customer communication",
-            "Issue resolution",
-            "Support documentation",
-        ],
-        "Administrative Assistant": [
-            "Scheduling",
-            "Document preparation",
-            "Record management",
-        ],
+@router.get("/ai/config")
+def ai_config_read(p=Depends(auth.admin)):
+    return ai_config.describe()
+
+
+@router.get("/ai/models")
+def ai_model_catalog(
+    provider: str | None = None, base_url: str | None = None, p=Depends(auth.admin)
+):
+    """Live model names from the selected provider; read-only discovery."""
+    effective = ai_config.config() or {}
+    if provider is None:
+        provider = effective.get("provider")
+    if provider not in ai_config.DEFAULTS:
+        raise HTTPException(422, "Provider must be openai or ollama")
+    import os
+    if provider == "openai" and not os.getenv("OPENAI_API_KEY") and effective.get("provider") == provider:
+        raise HTTPException(409, "OPENAI_API_KEY is not configured in the server environment")
+    target = {
+        "provider": provider,
+        # Ollama needs no extra settings; only its localhost default is used
+        # unless this exact request carries an explicit base_url override.
+        "base_url": base_url
+        if base_url is not None
+        else ("" if provider == "ollama" else effective.get("base_url", "")),
+        "model": effective.get("model") or "placeholder",
     }
-    created = []
-    for title, names in titles.items():
-        if s.scalar(
-            select(m.Vacancy).where(
-                m.Vacancy.org_id == p.org_id,
-                m.Vacancy.title == title,
-                m.Vacancy.is_sample == True,
-                m.Vacancy.deleted_at.is_(None),
-            )
-        ):
-            continue
-        v = svc.create_vacancy(
-            s,
-            p,
-            d.VacancyInput(
-                title=title,
-                description="Synthetic sample vacancy. Edit and approve criteria before publishing.",
-                requirements=[
-                    d.RequirementInput(
-                        description=name,
-                        importance="essential" if i < 2 else "preferred",
-                        acceptable_evidence_types=[
-                            "candidate_report",
-                            "document",
-                            "work_sample",
-                        ],
-                        minimum_observable_expectation="Describe one relevant example and your own contribution.",
-                        clarification_permitted=True,
-                    )
-                    for i, name in enumerate(names)
-                ],
-            ),
+    try:
+        models = ai_config.list_models(target)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    except Exception:
+        raise HTTPException(
+            502,
+            "Could not reach that provider endpoint; check Ollama is running and the base URL",
         )
-        v.is_sample = True
-        created.append(v)
+    return {"provider": provider, "models": models, "current": effective.get("model", "")}
+
+
+@router.post("/ai/config")
+def ai_config_write(body: AiConfigInput, p=Depends(auth.admin), s=Depends(get_db)):
+    try:
+        row = ai_config.save(
+            body.provider,
+            body.model,
+            body.base_url or "",
+            updated_by=(s.get(m.User, p.user_id).email if p.user_id else "server"),
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    svc.event(s, p, "ai.configured",
+        "A server administrator selected a model provider and model for this workspace; no credential is stored.")
     s.commit()
-    return {"items": [svc.public(v) for v in created]}
+    return {**row, "openai_key_present": ai_config.describe()["openai_key_present"]}

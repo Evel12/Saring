@@ -9,7 +9,6 @@ type PortalApplication = {
   id: string;
   vacancy_title: string;
   application_status: string;
-  demo: boolean;
   profile: { display_name: string; email: string | null };
   clarification: {
     id: string;
@@ -173,11 +172,6 @@ export function Portal({
           <option value="dark">Dark theme</option>
         </select>
       </div>
-      {(application ? application.demo : boot.data?.health.mode === "demo") && (
-        <div className="portal-demo">
-          DEMO · isolated synthetic application · no real candidate contact
-        </div>
-      )}
       <div className="portal-card">
         <span className="eyebrow">PRIVATE CANDIDATE WORKSPACE</span>
         <h1>
@@ -460,7 +454,7 @@ export function Portal({
                       <span className="tiny">
                         {(answers[q.id] || "").length} / 2,000 · optional
                       </span>
-                      {me.scopes.includes("document:upload") && !application?.demo && <span>Optional relevant PDF/DOCX artifact<input type="file" accept=".pdf,.docx" disabled={busy} aria-label={`Artifact for question ${i+1}`} onChange={e=>{const file=e.target.files?.[0];if(!file)return;act(async()=>{const body=new FormData();body.append("file",file);const doc=await post<{id:string}>("/candidate/applications/"+id+"/documents",body);setArtifacts({...artifacts,[q.id]:doc.id});setDirty(true);},"Private artifact uploaded. Its presence does not establish authorship or expertise.");}}/></span>}
+                      {me.scopes.includes("document:upload") && <span>Optional relevant PDF/DOCX artifact<input type="file" accept=".pdf,.docx" disabled={busy} aria-label={`Artifact for question ${i+1}`} onChange={e=>{const file=e.target.files?.[0];if(!file)return;act(async()=>{const body=new FormData();body.append("file",file);const doc=await post<{id:string}>("/candidate/applications/"+id+"/documents",body);setArtifacts({...artifacts,[q.id]:doc.id});setDirty(true);},"Private artifact uploaded. Its presence does not establish authorship or expertise.");}}/></span>}
                       {artifacts[q.id] && <span className="tiny">Private artifact attached · authorship unverified</span>}
                     </label>
                   ))}

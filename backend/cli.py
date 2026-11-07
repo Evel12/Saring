@@ -14,7 +14,7 @@ def create_admin(s, name, email, password):
         raise ValueError(
             "User already exists; add memberships through an existing administrator"
         )
-    org = m.Organization(name=name, is_demo=False)
+    org = m.Organization(name=name)
     s.add(org)
     s.flush()
     user = m.User(

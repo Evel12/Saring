@@ -9,6 +9,7 @@ import {
   History,
   Plus,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import { all, download, post, request } from "./api";
 import { useLoad, useEvents, navigate } from "./hooks";
@@ -16,6 +17,7 @@ import { snapshot, stage } from "./data";
 import {
   useApp,
   ActivityPanel,
+  ProgressPanel,
   Badge,
   Confirm,
   Empty,
@@ -43,6 +45,7 @@ import type {
   Question,
   Permissions,
   Outbox,
+  EvidenceSuggestion,
 } from "./types";
 
 export async function loadCandidate(id: string, signal?: AbortSignal) {
@@ -93,15 +96,11 @@ export function CandidateDetail({
       <div className="detail-layout">
         <Panel
           title="Application workspace"
-          aside={
-            row.candidate?.synthetic ? (
-              <Badge tone="amber">Synthetic applicant</Badge>
-            ) : undefined
-          }
         >
           <Tabs
             tabs={[
               "Overview",
+              "Findings",
               "Evidence",
               "Clarification",
               "Interview",
@@ -115,6 +114,7 @@ export function CandidateDetail({
           />
           <div className="tab-content" role="tabpanel" aria-label={tab}>
             {tab === "Overview" && <Overview row={row} />}{" "}
+            {tab === "Findings" && <FindingsPane row={row} />}{" "}
             {tab === "Evidence" && <EvidencePane row={row} />}{" "}
             {tab === "Clarification" && <ClarificationPane row={row} />}{" "}
             {tab === "Interview" && <InterviewPane row={row} />}{" "}
@@ -163,6 +163,7 @@ export function CandidateDetail({
               </a>
             </div>
           </Panel>
+          <ProgressPanel feed={feed} />
           <ActivityPanel feed={feed} />
         </aside>
       </div>
@@ -224,11 +225,33 @@ function Overview({ row }: { row: Snapshot }) {
           </p>
         </div>
       </div>
+
+      {Object.entries(row.brief.intro_answers || {}).length > 0 && (
+        <section className="round-card" aria-label="Apply form answers">
+          <div className="label-row">
+            <h3>Intro answers</h3>
+            <Badge>self-declared via apply link</Badge>
+          </div>
+          <p className="hint" style={{ margin: "4px 0 8px" }}>
+            The applicant's own words from the public apply form, shown
+            verbatim. Answers are contact-level input, not verified evidence.
+          </p>
+          <ul className="detail-chips" style={{ gridAutoFlow: "row", gap: 8 }}>
+            {Object.entries(row.brief.intro_answers || {}).map(([question, answer]) => (
+              <li key={question}>
+                <span className="hint" style={{ fontWeight: 600 }}>{question}</span>
+                <span>{answer as string}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <h3>Documents</h3>
       {row.extractions.map(ex => <details key={ex.id} className="notice">
         <summary>Extraction revision {ex.version} · {ex.engine}{ex.passages.some(p => p.quality === "uncertain") ? " · Needs source correction" : ""}</summary>
         <p>{ex.limitations}</p>
-        <ul>{ex.passages.map((p, i) => <li key={i}>{p.page ? `Page ${p.page}` : p.paragraph ? `Paragraph ${p.paragraph}` : "Source without locator"} · {p.method || "synthetic"} · {p.quality || "sample"}{p.ocr_confidence != null ? ` · OCR confidence ${Math.round(p.ocr_confidence)} (not a factual accuracy score)` : ""}</li>)}</ul>
+        <ul>{ex.passages.map((p, i) => <li key={i}>{p.page ? `Page ${p.page}` : p.paragraph ? `Paragraph ${p.paragraph}` : "Source without locator"} · {p.method || "cv"} · {p.quality || "unverified"}{p.ocr_confidence != null ? ` · OCR confidence ${Math.round(p.ocr_confidence)} (not a factual accuracy score)` : ""}</li>)}</ul>
         <p>Review the original. Upload a corrected accessible document below, or request factual clarification, then run the agent with re-extraction. Earlier sources remain in history.</p>
       </details>)}
       {row.documents.length ? (
@@ -239,15 +262,12 @@ function Overview({ row }: { row: Snapshot }) {
               <span>
                 {doc.original_name}
                 <small>
-                  {doc.synthetic
-                    ? "Synthetic extraction · no original binary"
-                    : `${Math.ceil(doc.size_bytes / 1024)} KB · private`}
+                  {`${Math.ceil(doc.size_bytes / 1024)} KB · private`}
                 </small>
                 {doc.excluded_at && <small>Excluded from processing · {doc.exclusion_reason}</small>}
               </span>
               <button
                 className="secondary"
-                disabled={doc.synthetic}
                 onClick={() =>
                   perform(() => download(doc.id, doc.original_name))
                 }
@@ -261,11 +281,9 @@ function Overview({ row }: { row: Snapshot }) {
       ) : (
         <p className="hint">No documents attached.</p>
       )}
-      {org.is_demo && <div className="round-card"><label>Synthetic replacement file<select value={replacement} onChange={e=>setReplacement(e.target.value)}><option value="support">Readable support DOCX</option><option value="developer">Readable developer DOCX</option></select></label><button className="secondary" disabled={busy} onClick={()=>perform(()=>post("/demo/applications/"+row.application.id+"/replacement-file",{variant:replacement}),"Synthetic replacement saved privately. Reanalyze sources to process it.")}>Add synthetic replacement</button></div>}
       <button className="secondary" disabled={busy||Boolean(row.application.withdrawn_at)} onClick={()=>perform(()=>post("/workflow-runs",{vacancy_id:row.application.vacancy_id,reextract_documents:true}),"Source reanalysis queued. Historical records remain available.")}>Reanalyze sources</button>
       {excludeDoc && <Confirm title="Exclude this original from future processing?" description={<><p>The original and earlier evidence remain in history. New analysis is required before another decision.</p><label>Source exclusion reason<input minLength={5} maxLength={500} value={exclusionReason} onChange={e=>setExclusionReason(e.target.value)}/></label></>} label="Confirm source exclusion" close={()=>setExcludeDoc(undefined)} confirm={()=>perform(async()=>{if(exclusionReason.trim().length<5)throw new Error("Give a source-related reason of at least five characters.");await post("/documents/"+excludeDoc+"/exclude",{reason:exclusionReason});setExcludeDoc(undefined);},"Source excluded. Add a replacement and reanalyze.")}/>}
-      {!org.is_demo && (
-        <form
+      <form
           className="additional-upload"
           onSubmit={(e) => {
             e.preventDefault();
@@ -302,7 +320,6 @@ function Overview({ row }: { row: Snapshot }) {
             <p className="inline-validation">Maximum document size is 5 MB.</p>
           )}
         </form>
-      )}
       {q.error && <Failed error={q.error} retry={q.reload} />}{" "}
       {q.data?.corrections
         .filter((c) => c.state === "pending")
@@ -435,6 +452,242 @@ function Overview({ row }: { row: Snapshot }) {
   );
 }
 
+type InsightLink = {
+  id: string;
+  url: string;
+  created_at: number;
+  state?: string;
+  title?: string;
+  message?: string;
+  status_code?: number | null;
+  subject?: string;
+  review?: string;
+  primary_language?: string;
+  languages?: string;
+  public_repositories?: number | null;
+  last_public_commit_utc?: string;
+  fork?: boolean;
+};
+type Insights = {
+  application_id: string;
+  summary?: string | null;
+  strengths: { id: string; text: string; created_at: number }[];
+  relevant_details: { id: string; text: string; created_at: number }[];
+  links: InsightLink[];
+};
+
+export function FindingsPane({ row }: { row: Snapshot }) {
+  const { revision, perform, busy } = useApp();
+  const [reviews, setReviews] = useState<Record<string, string>>({});
+  const q = useLoad(
+    (signal) =>
+      request<Insights>(
+        "/applications/" + row.application.id + "/insights",
+        { signal },
+      ),
+    [row.application.id, revision],
+  );
+  if (q.loading && !q.data) return <Loading label="Loading AI findings…" />;
+  if (q.error) return <Failed error={q.error} retry={q.reload} />;
+  if (!q.data) return null;
+  const data = q.data;
+  const empty =
+    !data.summary &&
+    !data.strengths.length &&
+    !data.relevant_details.length &&
+    !data.links.length;
+  return (
+    <>
+      <p className="hint">
+        What the AI found during the last agent review. Strengths and details
+        are exact quotes from the linked source evidence. Link checks are
+        neutral reachability observations, never a judgment about the
+        candidate. You still make the decision.
+      </p>
+      <details className="round-card explainer" aria-label="How evidence categories work">
+        <summary><b>How evidence works</b></summary>
+        <ul>
+          <li>
+            <b>Extracted CV lines</b> — the agent converts each linked document
+            into short passages and keeps only labelled professional lines.
+            Every one is stored as <i>candidate-reported</i>: the source is what
+            the candidate submitted, and the exact quote is kept with its
+            page/paragraph reference.
+          </li>
+          <li>
+            <b>Link checks</b> — links written in the CV are opened and recorded
+            as reachability states only: <i>observed</i> (page reached and
+            described), <i>manual</i> (root-only address, 404 or private — you
+            review it yourself). A link state is never a judgment about the
+            candidate.
+          </li>
+          <li>
+            <b>Clarification answers</b> — when you run a clarification round,
+            the candidate's emailed/portal answers enter evidence the same way,
+            tied to the specific question they answered.
+          </li>
+          <li>
+            <b>Criteria associations</b> — the AI picks which passages relate to
+            each approved criterion and records the exact cited quote with its
+            passage ID, so you can always read the origin. A citation shows
+            provenance, not truth: you confirm relevance yourself in the
+            Evidence tab.
+          </li>
+        </ul>
+      </details>
+      <section className="round-card" aria-label="CV summary">
+        <div className="label-row">
+          <h3>CV summary</h3>
+          <Badge>neutral · source-grounded</Badge>
+        </div>
+        {data.summary ? (
+          <p>{data.summary}</p>
+        ) : (
+          <p className="hint">
+            No summary yet — run the agent review to generate one from the
+            linked evidence.
+          </p>
+        )}
+      </section>
+      <section className="round-card" aria-label="Link verification">
+        <div className="label-row">
+          <h3>Link verification</h3>
+          <Badge>{data.links.length} checked</Badge>
+        </div>
+        {data.links.length ? (
+          <ul className="history-list">
+            {data.links.map((l) => (
+              <li key={l.id}>
+                <span className="tiny mono">{time(l.created_at)}</span>
+                <Badge
+                  tone={
+                    l.state === "observed"
+                      ? "green"
+                      : l.state === "not_found" || l.state === "unreachable"
+                        ? "red"
+                        : "amber"
+                  }
+                >
+                  {words(l.state || "manual")}
+                </Badge>
+                <p className="mono">
+                  <a href={l.url} target="_blank" rel="noreferrer">
+                    {l.url}
+                  </a>
+                  {l.title ? <> — “{l.title}”</> : null}
+                </p>
+                {l.message && <p className="hint">{l.message}</p>}
+                {l.subject === "repository" && (
+                  <p className="link-meta">
+                    <b>Public repository metadata</b>
+                    {(l.primary_language || l.languages) && <> · languages {l.primary_language || l.languages}</>}
+                    {typeof l.fork === "boolean" && <> · {l.fork ? "a fork" : "not a fork"}</>}
+                    {l.last_public_commit_utc && <> · last public push {new Date(l.last_public_commit_utc).toLocaleDateString()}</>}
+                  </p>
+                )}
+                {l.subject === "profile" && typeof l.public_repositories === "number" && (
+                  <p className="link-meta">
+                    <b>Public profile metadata</b> · {l.public_repositories} public repository/repositories
+                  </p>
+                )}
+                {(reviews[l.url] || l.review) && (
+                  <blockquote className="link-review">
+                    {reviews[l.url] || l.review}
+                  </blockquote>
+                )}
+                <div className="card-actions">
+                  <button
+                    className="text-button"
+                    disabled={busy}
+                    onClick={() =>
+                      perform(
+                        () =>
+                          post(
+                            "/applications/" + row.application.id + "/links/verify",
+                            { url: l.url },
+                          ),
+                        "Link verification refreshed.",
+                      )
+                    }
+                  >
+                    <ShieldCheck size={13} />
+                    Re-verify link
+                  </button>
+                  <button
+                    className="text-button"
+                    disabled={busy}
+                    onClick={() =>
+                      perform(async () => {
+                        const result = await post<InsightLink>(
+                          "/applications/" + row.application.id + "/links/review",
+                          { url: l.url },
+                        );
+                        setReviews((r) => ({ ...r, [l.url]: result.review || "" }));
+                      }, "AI opened the link and recorded a neutral review of its contents.")
+                    }
+                  >
+                    <ShieldCheck size={13} />
+                    Open &amp; AI review
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="hint">
+            No public links were found in the linked evidence to verify.
+          </p>
+        )}
+      </section>
+      <section className="round-card" aria-label="Strong points">
+        <div className="label-row">
+          <h3>Notable strong points</h3>
+          <Badge>{data.strengths.length} highlighted</Badge>
+        </div>
+        {data.strengths.length ? (
+          <ul className="strength-cards">
+            {data.strengths.map((s) => (
+              <li key={s.id}>
+                <Check size={13} />
+                <span>{s.text}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="hint">
+            No standout strength was grounded in the linked evidence. This is
+            not an assessment of the candidate — absent evidence is not
+            inability.
+          </p>
+        )}
+      </section>
+      <section className="round-card" aria-label="Job-relevant details">
+        <div className="label-row">
+          <h3>Job-relevant details</h3>
+          <Badge>{data.relevant_details.length} extracted</Badge>
+        </div>
+        {data.relevant_details.length ? (
+          <ul className="detail-chips">
+            {data.relevant_details.map((d) => (
+              <li key={d.id}>{d.text}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="hint">
+            No extra job-relevant details were extracted from the linked
+            evidence.
+          </p>
+        )}
+      </section>
+      {empty && (
+        <Empty title="No AI findings yet">
+          Run the agent review for this application, then reload this tab.
+        </Empty>
+      )}
+    </>
+  );
+}
+
 function RevisionHistory({ findingId }: { findingId: string }) {
   const q = useLoad(
     (signal) => all<Revision>("/findings/" + findingId + "/revisions", signal),
@@ -479,12 +732,16 @@ export function EvidencePane({ row }: { row: Snapshot }) {
     approve?: boolean;
   }>();
   const [history, setHistory] = useState<string>();
+  // Deterministic passage suggestions per requirement (no model call).
+  const [suggestions, setSuggestions] = useState<Record<string, EvidenceSuggestion[]>>();
   return (
     <>
       <p className="hint">
         Findings describe how evidence meets an expectation. Evidence type
-        describes its provenance. Neither is a numerical match score.
-          Optional private or unavailable portfolios are not fetched by this build. Missing artifact evidence stays unknown; offer an alternative example or code sample. Mostly Python projects do not contradict a Go claim.
+        describes its provenance. Neither is a numerical match score. Optional
+        private or unavailable portfolios are not fetched by this build.
+        Missing artifact evidence stays unknown; offer an alternative example
+        or code sample. Mostly Python projects do not contradict a Go claim.
       </p>
       {row.brief.requirements.map((r) => {
         const finding = row.brief.findings.find(
@@ -511,6 +768,19 @@ export function EvidencePane({ row }: { row: Snapshot }) {
                 >
                   {rev?.state || "Not reviewed"}
                 </Badge>
+                {rev?.provenance?.association_mode && (
+                  <Badge
+                    tone={
+                      rev.provenance.association_mode === "cache"
+                        ? "green"
+                        : rev.provenance.association_mode === "rescue"
+                          ? ""
+                          : "amber"
+                    }
+                  >
+                    {words(rev.provenance.association_mode)}
+                  </Badge>
+                )}
               </div>
             </div>
             <p className="expectation">
@@ -519,6 +789,13 @@ export function EvidencePane({ row }: { row: Snapshot }) {
               {r.minimum_observable_expectation}
             </p>
             {rev && <p>{rev.explanation}</p>}
+            {rev && (
+              <p className="hint">
+                {rev.evidence_ids.length
+                  ? "Cited passages: " + rev.evidence_ids.length + " · read each quote's origin above."
+                  : "No passage was associated with this criterion by the run. Open question below guides your manual review."}
+              </p>
+            )}
             {rev?.provenance?.model && <p className="hint">Analysis: {rev.provenance.provider} · {rev.provenance.model} · {rev.provenance.prompt_version}. Exact citations establish provenance; a recruiter must review factual accuracy.</p>}
             {evidence.map((e) => (
               <div className="source-card" key={e.id}>
@@ -548,10 +825,6 @@ export function EvidencePane({ row }: { row: Snapshot }) {
                 {e.document_id && (
                   <button
                     className="text-button"
-                    disabled={
-                      row.documents.find((d) => d.id === e.document_id)
-                        ?.synthetic
-                    }
                     onClick={() =>
                       perform(() =>
                         download(
@@ -563,10 +836,7 @@ export function EvidencePane({ row }: { row: Snapshot }) {
                     }
                   >
                     <FileText size={13} />
-                    {row.documents.find((d) => d.id === e.document_id)
-                      ?.synthetic
-                      ? "Synthetic source · no original file"
-                      : "Open authorized source document"}
+                    Open authorized source document
                   </button>
                 )}
                 <p className="hint">
@@ -620,7 +890,41 @@ export function EvidencePane({ row }: { row: Snapshot }) {
                   Change history
                 </button>
               )}
+              {finding && (
+                <button
+                  className="text-button"
+                  onClick={() =>
+                    perform(async () => {
+                      const result = await request<{ suggestions: EvidenceSuggestion[] }>(
+                        "/findings/" + finding.id + "/suggest-evidence",
+                      );
+                      setSuggestions((prev) => ({
+                        ...prev,
+                        [r.id]: result.suggestions,
+                      }));
+                    }, "Deterministic text-overlap suggestions computed locally; no model call.")
+                  }
+                >
+                  <Sparkles size={13} />
+                  Suggest passages
+                </button>
+              )}
             </div>
+            {suggestions && suggestions[r.id] && (
+              <div className="unknown-source">
+                {suggestions[r.id].length ? (
+                  <ul>
+                    {suggestions[r.id].slice(0, 5).map((s) => (
+                      <li key={s.id}>
+                        {s.passage.slice(0, 160)}
+                        {s.passage.length > 160 ? "…" : ""}
+                        {s.document_id && <> <code>{s.document_id.slice(0, 8)}</code></>}
+                      </li>
+                    ))}
+                  </ul>
+                ) : "No linked passage shares wording with this criterion."}
+              </div>
+            )}
             {history === finding?.id && finding && (
               <RevisionHistory findingId={finding.id} />
             )}
@@ -760,8 +1064,7 @@ function ClarificationWorkflowPanel({applicationId}: {applicationId: string}) {
   const {org, revision, perform, busy} = useApp();
   const q = useLoad(async (signal) => {
     const workflow = await request<{workflow: null | {state: string; resume_seq: number; deadline: number | null; max_reminders: number; reminders_sent: number; error: string; brief: {reason?: string; requirements?: {requirement_id: string; description: string; state: string; remaining_uncertainty: string; interview_followup: string}[]}}; delivery_actions?: {id: string; state: string; error: string}[]; actions: {id: string; action: string; rationale: string; result: {before?: string; after?: string}}[]}>("/applications/"+applicationId+"/clarification-workflow", {signal});
-    const mailbox = org.is_demo ? await request<{items: {id: string; kind: string; portal_url: string}[]}>("/demo/clarification-mailbox?application_id="+applicationId, {signal}) : {items: []};
-    return {...workflow, mailbox};
+    return {...workflow};
   }, [applicationId, revision]);
   if(q.error) return <Failed error={q.error} retry={q.reload}/>;
   if(!q.data?.workflow) return null;
@@ -772,7 +1075,6 @@ function ClarificationWorkflowPanel({applicationId}: {applicationId: string}) {
     {w.error && <p role="status" className="notice warning">{w.error}</p>}
     {w.state === "needs_attention" && w.resume_seq > 0 && <button className="secondary" disabled={busy} onClick={()=>perform(()=>post("/applications/"+applicationId+"/clarification-workflow/retry",{}),"Evidence update retry requested. Delivery errors use the outbox retry controls.")}>Retry evidence update</button>}
     {q.data.delivery_actions?.map(action=><div key={action.id} className="label-row"><span className="hint">Invitation action: {words(action.state)}{action.error ? " ? "+action.error : ""}</span>{["failed","not_configured"].includes(action.state) && <button className="secondary" disabled={busy} onClick={()=>perform(()=>post("/outbox/"+action.id+"/retry",{}),"Approved email action queued for retry with the same idempotency key.")}>Retry approved delivery</button>}</div>)}
-    {q.data.mailbox.items.map(message => <div key={message.id} className="notice"><div><b>DEMO mailbox · {words(message.kind)}</b><p>Synthetic message only. Open in a separate browser profile to use the real candidate portal.</p><a className="secondary" href={message.portal_url} target="_blank" rel="noreferrer">Open demo candidate portal</a></div></div>)}
     {!!w.brief.requirements?.length && <details open><summary>Review-ready brief and remaining uncertainties</summary><p>{w.brief.reason}</p>{w.brief.requirements.map(r => <div key={r.requirement_id}><b>{r.description} · {r.state}</b><p>{r.remaining_uncertainty}</p><p className="hint">Interview: {r.interview_followup}</p></div>)}</details>}
     <details><summary>Validated actions and finding changes</summary><ol>{q.data.actions.map(a=><li key={a.id}><b>{words(a.action)}</b>: {a.rationale}{a.result.before && <p>Before: {a.result.before} → After: {a.result.after}</p>}</li>)}</ol></details>
   </section>;
@@ -921,7 +1223,7 @@ function RoundCard({ id, row }: { id: string; row: Snapshot }) {
                 ))}
               </ol>
               <p>
-                Approval queues one portal invitation and authorizes only the reminder policy below. Worker evidence updates need no further approval. DEMO uses a synthetic mailbox; live requires configured email delivery.
+                Approval queues one portal invitation and authorizes only the reminder policy below. Worker evidence updates need no further approval. Live email delivery requires a configured email connection.
               </p>
               <label>Response deadline (hours)<input type="number" min={25} max={168} value={responseHours} onChange={e => setResponseHours(Number(e.target.value))} /></label>
               <label>Reminder policy<select value={reminders} onChange={e => setReminders(Number(e.target.value))}><option value={1}>At most one reminder after 24 hours</option><option value={0}>No reminder</option></select></label>
@@ -1207,9 +1509,8 @@ export function InvitationDialog({
           </>
         )}
         <p className="hint">
-          {org.is_demo
-            ? "DEMO: synthetic application only."
-            : "This separately created link is shared manually. Approved workflow email status appears in Clarification."}
+          This separately created link is shared manually. Approved workflow
+          email status appears in Clarification.
         </p>
       </div>
     </Modal>

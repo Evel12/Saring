@@ -10,11 +10,13 @@ services:
       test: ["CMD-SHELL", "pg_isready -U saring"]
       interval: 3s
       retries: 20
+    restart: unless-stopped
   migrate:
     build: {context: ., dockerfile: Dockerfile.api}
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://saring:saring@db:5432/saring
+      COOKIE_SECURE: "true"
     command: alembic upgrade head
     depends_on:
       db: {condition: service_healthy}
@@ -23,25 +25,25 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://saring:saring@db:5432/saring
-      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost:8080}
-    volumes: ["files:/app/storage", "sessions:/app/.runtime"]
+    volumes: ["files:/app/storage"]
     depends_on:
       migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
   worker:
     build: {context: ., dockerfile: Dockerfile.api}
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://saring:saring@db:5432/saring
-      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost:8080}
     command: python -m backend.worker
-    volumes: ["files:/app/storage", "sessions:/app/.runtime"]
+    volumes: ["files:/app/storage"]
     depends_on:
       migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
   web:
     build: {context: ., dockerfile: Dockerfile.web}
     ports: ["127.0.0.1:8080:80"]
     depends_on: [api]
+    restart: unless-stopped
 volumes:
   database:
   files:
-  sessions:

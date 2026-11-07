@@ -75,6 +75,30 @@ def parse_local(path, suffix, ocr=ocr_page):
             text = page.extract_text() or ""
         except Exception:
             text = ""
+        # Extract clickable hyperlink annotations (URLs hidden behind
+        # display text like "github" in PDFs). pypdf's extract_text()
+        # only returns visible text, so link annotations are read
+        # separately and appended to the page text so link verification
+        # can find them.
+        link_urls = []
+        try:
+            annots = page.get("/Annots")
+            if annots:
+                for annot in annots:
+                    try:
+                        obj = annot.get_object()
+                        if obj.get("/Subtype") == "/Link":
+                            action = obj.get("/A")
+                            if action and action.get("/S") == "/URI":
+                                uri = action.get("/URI")
+                                if uri:
+                                    link_urls.append(str(uri))
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        if link_urls:
+            text = text + "\nLinks: " + " ".join(link_urls)
         method, quality, confidence = "pdf", "readable", None
         if not sufficient(text):
             try:

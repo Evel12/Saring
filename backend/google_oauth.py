@@ -26,9 +26,7 @@ class ExpiredCredential(CalendarConfiguration):
 def cipher():
     key = os.getenv("TOKEN_ENCRYPTION_KEY")
     if not key:
-        if auth.MODE == "live":
-            raise CalendarConfiguration("TOKEN_ENCRYPTION_KEY is required for live OAuth")
-        key = base64.urlsafe_b64encode(hashlib.sha256((auth.secret_key()+":oauth-development").encode()).digest())
+        raise CalendarConfiguration("TOKEN_ENCRYPTION_KEY is required for OAuth")
     try:
         return Fernet(key)
     except Exception:
@@ -58,8 +56,6 @@ def configuration():
 
 
 def start(s, p):
-    if s.get(m.Organization, p.org_id).is_demo:
-        return {"mode": "demo", "authorization_url": None, "status": "Synthetic calendar; OAuth is never called"}, None
     client_id, _, redirect_uri = configuration()
     state, verifier = secrets.token_urlsafe(32), secrets.token_urlsafe(48)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
@@ -74,7 +70,7 @@ def finish(s, state, code, cookie):
     if not cookie or not secrets.compare_digest(state, cookie):
         raise HTTPException(403, "OAuth browser state mismatch")
     attempt = s.scalar(select(m.OAuthAttempt).where(m.OAuthAttempt.state_hash == auth.digest(state), m.OAuthAttempt.expires_at > now(), m.OAuthAttempt.used_at.is_(None)).with_for_update())
-    if not attempt or s.get(m.Organization, attempt.org_id).is_demo:
+    if not attempt:
         raise HTTPException(400, "OAuth state expired or used")
     session = s.get(m.AuthSession, attempt.session_id)
     member = s.scalar(select(m.Membership).where(m.Membership.org_id == attempt.org_id, m.Membership.user_id == attempt.user_id, m.Membership.active == True, m.Membership.role == "admin"))
@@ -132,8 +128,6 @@ def finish(s, state, code, cookie):
 
 
 def access_token(s, org_id):
-    if s.get(m.Organization, org_id).is_demo:
-        raise CalendarConfiguration("Demo must never request live credentials")
     connection = s.scalar(select(m.ProviderConnection).where(m.ProviderConnection.org_id == org_id, m.ProviderConnection.provider == "google_calendar"))
     credential = s.scalar(select(m.OAuthCredential).where(m.OAuthCredential.connection_id == connection.id).with_for_update()) if connection else None
     if not credential or credential.revoked_at:

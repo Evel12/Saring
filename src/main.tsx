@@ -15,6 +15,7 @@ import { ApiError, all, post, request, selectOrganization } from "./api";
 import { useHash, useLoad, navigate } from "./hooks";
 import { AppContext, Failed, Loading } from "./ui";
 import { Vacancies, VacancyWizard } from "./Vacancies";
+import { ApplyPage } from "./Apply";
 import { Dashboard } from "./Dashboard";
 import { CandidateDetail } from "./CandidateDetail";
 import { Review } from "./Review";
@@ -34,6 +35,11 @@ function Root() {
   if (invitation) return <Portal token={invitation} />;
   if (route.startsWith("/candidate/"))
     return <Portal applicationId={route.split("/")[2]} />;
+  // Public apply link: #/apply/{vacancy_id}/{token} — no login, any visitor
+  // with the link can view the posting and submit an application.
+  const applySegments = route.split("?")[0].split("/").filter(Boolean);
+  if (applySegments[0] === "apply" && applySegments[1] && applySegments[2])
+    return <ApplyPage vacancyId={applySegments[1]} token={applySegments[2]} />;
   return <RecruiterApp route={route} />;
 }
 function RecruiterApp({ route }: { route: string }) {
@@ -59,10 +65,6 @@ function RecruiterApp({ route }: { route: string }) {
         me = await request<Me>("/auth/me", { signal });
       } catch (e) {
         if (!(e instanceof ApiError) || ![401, 403].includes(e.status)) throw e;
-      }
-      if (!me && health.mode === "demo" && !login && !signedOut) {
-        await post("/api/demo-session");
-        me = await request<Me>("/auth/me", { signal });
       }
       const org =
         me && me.role !== "candidate"
@@ -115,7 +117,6 @@ function RecruiterApp({ route }: { route: string }) {
   const agentPaused =
     !agentActive && agent.data?.some((r) => r.state === "paused");
   const org = q.data?.org;
-  const demo = org?.is_demo;
   const page = route.split("?")[0];
   const segments = page.split("/").filter(Boolean);
   const tab =
@@ -185,23 +186,6 @@ function RecruiterApp({ route }: { route: string }) {
         <button className="primary" disabled={busy}>
           Sign in
         </button>
-        {q.data?.health.mode === "demo" && (
-          <button
-            type="button"
-            className="secondary"
-            disabled={busy}
-            onClick={() =>
-              perform(async () => {
-                await post("/api/demo-session");
-                setSignedOut(false);
-                setLogin(false);
-                setBootstrap((n) => n + 1);
-              }, "Isolated synthetic demo session opened.")
-            }
-          >
-            Open isolated demo workspace
-          </button>
-        )}
         <p className="hint">
           An administrator provisions accounts through the local CLI. No shared
           bearer token is used.
@@ -268,13 +252,7 @@ function RecruiterApp({ route }: { route: string }) {
         <span className="header-divider" />
         <span className="product-name">Recruitment workspace</span>
         {q.data && (
-          <span className="mode">
-            {demo
-              ? "DEMO"
-              : session
-                ? "LIVE"
-                : q.data.health.mode.toUpperCase()}
-          </span>
+          <span className="mode">LIVE</span>
         )}
         <div className="header-right">
           {session && session.role !== "candidate" && (
@@ -339,16 +317,6 @@ function RecruiterApp({ route }: { route: string }) {
           )}
         </div>
       </header>
-      {demo && (
-        <div className="demo-banner">
-          <ShieldCheck size={14} />
-          <b>DEMO</b>
-          <span>
-            Isolated synthetic records. No real messages or calendar actions.
-          </span>
-          <a href="#/settings">Sandbox settings</a>
-        </div>
-      )}
       {session && session.role !== "candidate" && (
         <nav className="app-nav" aria-label="Workspace navigation">
           {[
@@ -400,8 +368,7 @@ function RecruiterApp({ route }: { route: string }) {
           <b>saring.</b> Evidence first. Humans decide.
         </span>
         <span>
-          {demo ? "DEMO · synthetic data" : "Organization-scoped access"} · No
-          automated hiring decisions
+          Organization-scoped access · No automated hiring decisions
         </span>
       </footer>
     </>

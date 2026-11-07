@@ -1,4 +1,4 @@
-"""Resend REST adapter with provider idempotency. Demo never calls HTTP."""
+"""Resend REST adapter with provider idempotency. Never simulates providers."""
 import os
 import re
 from datetime import datetime, timezone
@@ -11,11 +11,8 @@ from backend import clarification as loop
 
 
 def send_message(s,org_id,key,to,sender,subject,text,first_attempt_at,origin):
-    """Shared real Resend adapter for approved interview messages, explicit demo boundary."""
+    """Shared real Resend adapter for approved interview messages."""
     from backend.google_oauth import CalendarConfiguration, ExpiredCredential
-    if s.get(m.Organization,org_id).is_demo:
-        import hashlib
-        return {"id":"demo-"+hashlib.sha256(key.encode()).hexdigest()[:24],"mode":"demo"}
     connection=s.scalar(select(m.ProviderConnection).where(m.ProviderConnection.org_id==org_id,m.ProviderConnection.provider=="email"))
     credential=os.getenv(connection.credential_ref) if connection else None
     if not credential or not sender:raise CalendarConfiguration("Organization Resend credential or verified sender is not configured")
@@ -51,10 +48,6 @@ def send(s, row, org):
         return "cancelled", "Candidate has opened the portal; no additional invitation email sent"
     if invitation.expires_at <= now():
         return "needs_attention", "Invitation expired; recruiter must explicitly reissue access"
-    if org.is_demo:
-        workflow.state = "waiting"
-        a.review_state = "awaiting_response"
-        return "simulated", "Synthetic mailbox only; no email transmitted"
     candidate = s.get(m.Candidate, a.candidate_id)
     if candidate.email and candidate.email != row.payload.get("to"):
         return "needs_attention", "Operational email changed after approval; reconcile the approved recipient before sending"

@@ -70,6 +70,8 @@ class Vacancy(Tenant, Base):
     active_requirement_version_id: Mapped[str | None] = mapped_column(
         String(36), nullable=True
     )
+    apply_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    intro_questions: Mapped[list | None] = mapped_column(JSON, nullable=True)
     deleted_at: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
@@ -131,6 +133,10 @@ class Application(Tenant, Base):
     reassessment_required: Mapped[bool] = mapped_column(Boolean, default=False)
     decision: Mapped[str] = mapped_column(String(20), default="undecided")
     withdrawn_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Applicant's answers to the vacancy's apply-link questions; the recruiting
+    # workspace reads these through the application intro API. JSON to stay
+    # schema-light as question sets evolve.
+    intro_answers: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
 class Document(Tenant, Base):
@@ -263,6 +269,25 @@ class FindingEvidence(Tenant, Base):
     )
     revision_id: Mapped[str] = mapped_column(String(36))
     evidence_id: Mapped[str] = mapped_column(String(36))
+
+
+class AnalysisInsight(Tenant, Base):
+    """Persisted agent-review results served on the AI Findings page.
+
+    kind: summary | strength | detail | link. Insert-only per review run; the
+    latest rows per kind are what the insights endpoint serves.
+    """
+    __tablename__ = "analysis_insights"
+    __table_args__ = scoped(
+        ref("application_id", "applications"),
+        ref("run_id", "workflow_runs"),
+        CheckConstraint("kind IN ('summary','strength','detail','link')"),
+    )
+    application_id: Mapped[str] = mapped_column(String(36))
+    run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    kind: Mapped[str] = mapped_column(String(20))
+    text: Mapped[str] = mapped_column(Text, default="")
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
 class Approval(Tenant, Base):
@@ -644,6 +669,18 @@ class RateLimitBucket(Base):
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     window: Mapped[int] = mapped_column(Integer, primary_key=True)
     count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class AiModelConfig(Base):
+    """Server-level AI provider/model selection; secrets stay in the environment."""
+    __tablename__ = "ai_model_configs"
+    context: Mapped[str] = mapped_column(String(16), primary_key=True, default="server")
+    provider: Mapped[str] = mapped_column(String(16), default="openai")
+    base_url: Mapped[str] = mapped_column(String(500), nullable=False, server_default="")
+    model: Mapped[str] = mapped_column(String(200), nullable=False, server_default="")
+    updated_by: Mapped[str] = mapped_column(String(254), nullable=False, server_default="")
+    updated_at: Mapped[float] = mapped_column(Float, default=now)
+    __table_args__ = (CheckConstraint("provider IN ('openai', 'ollama')", name="ck_ai_provider"),)
 
 
 APPEND_ONLY = (

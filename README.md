@@ -2,19 +2,19 @@
 
 An evidence-first recruitment workspace with a real organization-scoped backend. React/TypeScript + Vite, FastAPI, SQLAlchemy/Alembic, SQLite or PostgreSQL, and a separate durable Python worker. Docker is **optional**.
 
-Start with **Explore complete demo** for five synthetic people and ten separate applications in two sample vacancies, or choose the equally visible **Create vacancy** action. The closed synthetic file catalog runs real DOCX/PDF parsing and local OCR; model, email and calendar remain explicitly simulated in DEMO. Public sessions never receive other tenants' applicant records and cannot upload arbitrary real files.
+Saring has no demo mode of any kind. Every deployment runs live: AI analysis, AI criteria suggestions, candidate email and Google Calendar coordination all require real server-side credentials and fail truthfully when they are missing. Nothing in the code fabricates applicants, model output, provider acceptance or delivery.
 
-Final verification: **87 backend tests passed**, **10 browser journeys passed**, plus the separate **worker-crash/HR-wait/candidate-wait UI restart journey passed**. Real Tesseract 5.5.3 recognition, production build, `pip check`, npm audit and locked Python dependency audit ran successfully. No credentialed live model/Google/Resend request or public deployment occurred. Read the [truthful test report](docs/TEST_REPORT.md), [architecture and states](docs/ARCHITECTURE.md), [four-minute demo script](docs/DEMO_SCRIPT.md) and [deployment recipe](docs/DEPLOYMENT.md).
+[Architecture and execution contracts](docs/ARCHITECTURE.md) · [Deployment recipe](docs/DEPLOYMENT.md) · [API contract](API_CONTRACT.md)
 
 ## Start from CMD, without Docker
 
-Requires Python 3.12+ and Node 22+. In `E:\Saring`:
+Requires Python 3.12+ and Node 22+. In the project root:
 
 ```cmd
 setup.cmd
 ```
 
-Then run these in three separate CMD windows:
+Then run these in three separate CMD windows, with the required environment set (see below):
 
 ```cmd
 cd /d E:\Saring
@@ -31,11 +31,9 @@ cd /d E:\Saring
 start-web.cmd
 ```
 
-Open **http://127.0.0.1:5173**. Interactive API documentation is at **http://127.0.0.1:8000/docs**. These commands default to DEMO mode and a local SQLite database at `saring.db`; PostgreSQL and API keys are unnecessary for the foundation/demo workflow. The worker must remain running to process queued jobs. Closing the browser does not stop workflow progress.
+Open **http://127.0.0.1:5173** (development web) or build `dist/` and serve it for real use. Interactive API documentation is at **http://127.0.0.1:8000/docs**.
 
-For the scanned-CV journey and full browser suite, run `setup-ocr.cmd` once before starting the worker. It downloads micromamba from its official distribution and installs Tesseract 5.5.3 and language data into ignored `.runtime/ocr` (roughly 217 MB of packages here). `start-worker.cmd` detects that workspace-only installation. An existing installation can instead use `TESSERACT_CMD`/`TESSDATA_PREFIX`; no OCR binary is committed. The default readable-file demo works without OCR and truthfully marks unavailable/uncertain OCR when necessary.
-
-`setup.cmd` creates the virtual environment, installs locked dependencies, installs frontend dependencies, and runs migrations. `start-api.cmd` checks/applies migrations before launching. The scripts run console processes in their current CMD window; they do not require background services or administrator privileges. Stop them with Ctrl+C.
+`setup.cmd` creates the virtual environment, installs locked dependencies, installs frontend dependencies, and runs migrations. `start-api.cmd` applies migrations before launching. The scripts run console processes in their current CMD window; they do not require background services or administrator privileges. Stop them with Ctrl+C.
 
 For manual setup, the equivalent commands are:
 
@@ -47,9 +45,28 @@ npm.cmd ci
 .venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
-Run `.venv\Scripts\python.exe -m backend.worker` and `npm.cmd run dev` separately. Local Python commands use process environment variables; `.env` is consumed by Docker Compose, not automatically by Python. No `.env` is needed for default local demo startup.
+Run `.venv\Scripts\python.exe -m backend.worker` and `npm.cmd run dev` separately. Local Python commands use process environment variables; `.env` is consumed by Docker Compose, not automatically by Python.
 
-## Recruiter accounts and non-demo records
+## Required environment
+
+The API refuses to start without all of these set in both the API and worker environments (CMD scripts do not auto-load `.env`; Compose consumes it), unless you use `COOKIE_SECURE=false` for loopback-only testing:
+
+```cmd
+set SESSION_SECRET=at-least-32-random-characters
+set OPENAI_API_KEY=...
+set OPENAI_MODEL=...
+set COOKIE_SECURE=false
+```
+
+For a local Ollama server you can skip `OPENAI_API_KEY` and instead set `set AI_PROVIDER=ollama` alongside `OPENAI_MODEL`, or simply use the admin **AI model** card in Settings → Provider connections to pick Ollama, its base URL (`http://localhost:11434/v1`) and an installed model; the saved selection is stored server-side without secrets and takes precedence. For OpenAI-compatible endpoints only, an admin can also switch provider/model there, but `OPENAI_API_KEY` must still be set in the environment.
+
+Generate a session secret with `python -c "import secrets; print(secrets.token_urlsafe(48))"`. Use the same secret/environment in API and worker. Sessions use `COOKIE_SECURE=true` by default and that is the correct value for HTTPS; `COOKIE_SECURE=false` exists only for local plain-HTTP development. Set explicit HTTPS `ALLOWED_ORIGINS` for hosted use. The UI uses email/password login and HttpOnly sessions; there are no shared recruiter bearer tokens and no credentials in localStorage. Only the theme preference uses localStorage.
+
+`SESSION_SECRET` is also required for the frontend session store; keep it out of the browser or client bundles. It is not derivable from the database, so losing it invalidates all sessions (recruiters simply log in again; candidate invitations remain valid because they are independent records).
+
+Session signing uses Starlette SessionMiddleware/itsdangerous. Random session handles are hashed in database records with absolute expiry and revocation. Candidate invitations are random, hashed, short-lived, revocable, single-use for exchange, and restricted to one application and explicit scopes. Candidate sessions are bounded by invitation expiry. The candidate API never exposes recruiter findings, decisions, other applicants, or original documents without an explicit document-read scope.
+
+## Recruiter accounts
 
 Provision the initial organization/admin through the CLI, rather than an unauthenticated registration endpoint:
 
@@ -59,18 +76,6 @@ Provision the initial organization/admin through the CLI, rather than an unauthe
 
 Enter a password of at least 12 characters at the hidden prompt. Passwords are hashed with Argon2 through pwdlib. The admin can create recruiter/admin memberships through `/api/v1/memberships`. Existing users can join additional organizations without changing their passwords. Recruiters cannot manage memberships or provider connections. Revoking membership immediately invalidates access to that organization.
 
-To run the UI in LIVE mode over **local HTTP**, set these in the API and worker CMD windows before starting them:
-
-```cmd
-set SARING_MODE=live
-set COOKIE_SECURE=false
-set SESSION_SECRET=replace-with-at-least-32-random-characters
-```
-
-Generate a secret with `python -c "import secrets; print(secrets.token_urlsafe(48))"`. Use the same secret/environment in API and worker. LIVE defaults to secure cookies; `COOKIE_SECURE=false` is a local HTTP setting. Use `COOKIE_SECURE=true`, HTTPS, and explicit `ALLOWED_ORIGINS` for hosted use. The UI uses email/password login and HttpOnly sessions; there are no shared recruiter bearer tokens and no credentials in localStorage. Only the theme preference uses localStorage.
-
-Session signing uses Starlette SessionMiddleware/itsdangerous. Random session handles are hashed in database records with absolute expiry and revocation. DEMO generates a private ignored `.runtime/session.key`; LIVE requires `SESSION_SECRET`. Candidate invitations are random, hashed, short-lived, revocable, single-use for exchange, and restricted to one application and explicit scopes. Candidate sessions are bounded by invitation expiry. The candidate API never exposes recruiter findings, decisions, other applicants, or original documents without an explicit document-read scope.
-
 ## Frontend workspace
 
 The frontend uses the v1 contracts directly, with cookie/CSRF authentication and cursor-based polling of persisted events.
@@ -79,19 +84,17 @@ IBM Plex Sans and JetBrains Mono are bundled locally, with OFL notices in `publi
 
 The workspace includes:
 
-- A paginated vacancy list with explicitly labelled synthetic samples.
-- A four-step vacancy wizard: custom details, editable criteria/evidence, explicit HR approval, then separate publication. Starter templates are Software Developer, Customer Support and Administrative Assistant. Applying a template preserves an entered custom title.
+- A paginated vacancy list.
+- A four-step vacancy wizard: custom details, editable criteria/evidence, explicit HR approval, then separate publication. Starter templates are Software Developer, Customer Support and Administrative Assistant. Applying a template preserves an entered custom title. **Suggest criteria** uses the configured AI provider and always produces editable drafts, never auto-approved criteria.
 - The reference-style three-column dashboard with editable summary/CVs, independent applicant stages, essential supported/partial/unknown counts, evidence completeness, approval cards and a terminal activity feed. Tablet/mobile layouts move and stack panels.
 - Candidate Overview, Evidence, Clarification, Interview and History tabs, exact source passages, finding revision history, approved-question scopes and authorized document downloads.
 - Recruiter comparison, versioned editable interview briefs, explicit brief/shortlist approval, and independent scheduling approval.
 - An application-scoped candidate portal with profile correction requests, optional source/consent permissions, server-saved drafts, submit confirmation and a factual application status. Submission closes the invitation; the confirmation receipt reports the actual server submission.
-- Calendar, integration/settings and operational metrics views. Missing configuration, offline connections, failures, waiting, retries and simulated results are labelled explicitly.
+- Calendar, integration/settings and operational metrics views. Missing configuration, offline connections, failures, waiting and retries are labelled explicitly.
 
 The candidate invitation link uses a URL fragment and is exchanged for a scoped session. Preview it in a separate browser profile/private window; exchanging it in a recruiter browser replaces that browser's session. Only theme preferences use localStorage. Candidate drafts and briefs are saved on the server. All text/notes/source passages render as escaped plain text; arbitrary HTML/Markdown is not executed.
 
 The event feed initially reads the latest persisted events, then resumes by event ID. Network retries use backoff; manual reconnect retains the cursor. Timers only schedule network polling, never workflow completion. Coverage is the number of criteria with associated evidence, not a hiring-success probability. An applicant awaiting clarification does not put every applicant in a waiting state.
-
-Migration 005 adds explicit sample flags, candidate drafts, factual correction requests, source permission history and interview brief revisions. `start-api.cmd` applies it before startup. Existing approved criteria and source/finding history remain intact.
 
 ## Foundation and history (backend)
 
@@ -101,13 +104,13 @@ Vacancies move through `draft`, `published`, and `closed`. Publication requires 
 
 Evidence records preserve an exact passage, document/response/extraction identifiers, page/paragraph when available, artifact location, observation timestamp and supersedes link. Evidence strength is `candidate_reported`, `artifact_backed`, or `assessment_observed`. Finding status is separately `supported`, `partial`, `unknown`, or `conflicting`, with append-only revisions and evidence links. A supported finding does not turn self-report into verified expertise.
 
-Approved criteria and historical evidence/revisions are protected by ORM guards and database triggers. SQLite enables foreign-key enforcement; composite foreign keys reject cross-organization relational references. Synthetic demo reset is an explicit exception for deleting **only the caller's isolated demo organization**. Other organizations are unaffected.
+Approved criteria and historical evidence/revisions are protected by ORM guards and database triggers. SQLite enables foreign-key enforcement; composite foreign keys reject cross-organization relational references.
 
-Migrations 001/002 are frozen legacy metadata. Migration 003 preserves previous records in `legacy_*` tables and creates the relational schema; legacy records are not exposed by the new API or assigned to arbitrary tenants. Migration 004 installs immutable-history guards; 005 supplies frontend persistence; 006 adds analysis provenance; 007 adds bounded clarification; 008 adds interview/OAuth persistence; 009 adds execution history and controlled erasure; 010 adds source exclusion/replacement recovery. All earlier history is preserved. Upgrade/downgrade/upgrade is tested on a temporary database containing a synthetic legacy record. Take backups before migrating real records.
+Migrations 001/002 are frozen legacy metadata. Migration 003 preserves previous records in `legacy_*` tables and creates the relational schema; legacy records are not exposed by the new API or assigned to arbitrary tenants. Migration 004 installs immutable-history guards; 005 supplies frontend persistence; 006 adds analysis provenance; 007 adds bounded clarification; 008 adds interview/OAuth persistence; 009 adds execution history and controlled erasure; 010 adds source exclusion/replacement recovery. All earlier history is preserved. Take backups before migrating real records.
 
 ## Processing and adapters
 
-The worker claims database jobs using conditional updates, lease tokens, bounded retries and fenced commits. It supports pause/resume/cancel/retry and persists events/metrics. Re-extraction creates a new extraction version and superseding evidence, retaining original history. The foundation reviewer conservatively associates explicit professional CV claims and generates `partial`/`unknown` findings and bounded draft questions. It never scores, selects, rejects or hires applicants.
+The worker claims database jobs using conditional updates, lease tokens, bounded retries and fenced commits. It supports pause/resume/cancel/retry and persists events/metrics. Re-extraction creates a new extraction version and superseding evidence, retaining original history.
 
 PDF/DOCX uploads are limited to 5 MB with extension/media/signature checks and generated private storage keys. DOCX archive size/entry count and macros are checked before parsing. PDF text preserves actual page numbers; DOCX paragraphs (including tables) preserve paragraph numbers, never invented pages. PDFs are limited to 20 pages. Parsing runs in a subprocess killed after 90 seconds. Malformed/encrypted files produce a controlled error and can be replaced; password-protected PDFs must be unlocked before upload. Originals and previous extraction revisions remain private and unchanged.
 
@@ -119,17 +122,21 @@ set OCR_LANG=eng
 start-worker.cmd
 ```
 
-Missing Tesseract is recorded as `ocr-unavailable`, not invented extracted text. Mean token confidence below 75 or insufficient recognized text marks a page `uncertain`; these passages are excluded from automated findings. OCR confidence is not factual accuracy. Candidate Overview exposes every extraction revision, per-page method/quality and the correction/reupload route. Exclude an unreadable original with a reason, add an accessible replacement and choose **Reanalyze sources**. The original and earlier evidence stay in history; excluded sources do not enter new association. Real image-only synthetic PDF recognition was verified locally with Tesseract 5.5.3 (95.44 mean token confidence on this fixture, not an accuracy claim).
+A workspace-only installer, `setup-ocr.cmd`, downloads micromamba from its official distribution and installs Tesseract 5.5.3 and language data into ignored `.runtime/ocr` (~217 MB). `start-worker.cmd` picks it up automatically. An existing system installation can instead use `TESSERACT_CMD`/`TESSDATA_PREFIX`; no OCR binary is committed.
 
-The worker now calls a configurable server-side OpenAI-compatible analysis adapter for **non-demo organizations**, requiring `OPENAI_API_KEY` and `OPENAI_MODEL`; `OPENAI_BASE_URL` is optional. Compatible providers must support strict Chat Completions JSON Schema outputs. Missing credentials, refusal, truncation, incompatible schemas or invalid citations fail the persisted job with bounded retries; there is no fake-success fallback. An explicitly synthetic organization uses the deterministic demo adapter without network calls. Existing domain tests explicitly inject that deterministic adapter; a separate HTTP mock exercises the real OpenAI SDK request/response boundary without credentials or external network.
+Missing Tesseract is recorded as `ocr-unavailable`, not invented extracted text. Mean token confidence below 75 or insufficient recognized text marks a page `uncertain`; these passages are excluded from automated findings. OCR confidence is not factual accuracy. Candidate Overview exposes every extraction revision, per-page method/quality and the correction/reupload route. Exclude an unreadable original with a reason, add an accessible replacement and choose **Reanalyze sources**. The original and earlier evidence stay in history; excluded sources do not enter new association.
+
+The worker calls a server-side OpenAI-compatible analysis adapter. A saved admin selection (Settings → Provider connections → AI model) wins; otherwise `OPENAI_MODEL` plus `OPENAI_API_KEY` (or `AI_PROVIDER=ollama` for keyless local Ollama) set the model; `OPENAI_BASE_URL` is optional. Choosing Ollama in Settings requires no further settings — the local endpoint `http://localhost:11434/v1` is used automatically. Compatible providers must support strict Chat Completions JSON Schema outputs. Missing credentials, refusal, truncation, incompatible schemas or invalid citations fail the persisted job with bounded retries; there is no fake-success fallback.
 
 Each approved requirement retrieves up to eight lexically relevant, minimized passages from permitted evidence types. The model receives requirement IDs and opaque evidence/extraction IDs, never contact records, raw files or images. Only labelled professional lines are retained; known applicant names/contact details, URLs, explicit personal fields and detected instruction-like lines are excluded. This deliberately misses unlabelled material and is not a complete PII detector or a bias guarantee. Recruiters review omissions and use clarification. The adapter has no tools and treats source text as data. Responses require exact requirement/evidence IDs and contiguous source quotations. Invalid citations reject the result. Automatic CV associations are limited to partial/unknown; supported findings and actual incompatible-statement conflicts require human source review. JSON schema compliance and quote containment do not establish factual truth. Finding revisions persist provider/model/prompt/profile versions, exact citations and extraction version IDs, never keys or hidden reasoning. The request follows [official structured-output documentation](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=chat).
 
 Candidate URLs are optional and **retrieval is disabled**: `fetch_candidate_url` refuses every URL without DNS or HTTP access. There is no environment switch to enable unsafe retrieval. A future enabled adapter must separately implement approved public-host allowlisting, IP/redirect revalidation, SSRF protections and bounded transfers. Uploaded materials remain the default.
 
-Only labelled professional lines enter automatic CV evidence association. Candidate answers remain self-reported. Filtering is conservative and incomplete; it does not eliminate bias. Raw originals/extractions/responses remain private records. Recruiters must exclude irrelevant and protected information when evaluating applicants. Missing/private links, unknown evidence, other repository languages and technology mentions do not establish inability, contradiction, authorship or expertise. The foundation does not fetch applicant URLs or infer personality, honesty, emotion, protected characteristics or learning potential.
+Only labelled professional lines enter automatic CV evidence association. Candidate answers remain self-reported. Filtering is conservative and incomplete; it does not eliminate bias. Raw originals/extractions/responses remain private records. Recruiters must exclude irrelevant and protected information when evaluating applicants. Missing/private links, unknown evidence, other repository languages and technology mentions do not establish inability, contradiction, authorship or expertise. Saring does not fetch applicant URLs or infer personality, honesty, emotion, protected characteristics or learning potential.
 
-Clarification uses one automatic round per approved criteria version and at most three questions, prioritized by essentiality, conflicts/unknowns/partials and material usefulness. Existing detailed evidence and previously asked criteria are checked first. Requirements that cannot accept candidate reports or work samples go directly to recruiter review. The original lifetime cap of two historical rounds per application remains a hard stop; no automatic second round is started to chase unresolved answers. A single recruiter approval authorizes the exact questions, a 1?168-hour response deadline, and zero or one reminder before that deadline. Approval queues the initial invitation; it does not claim delivery. Submission automatically queues a leased worker continuation, independent of the original batch run. No candidate response is generated by any live or demo worker.
+## Clarification
+
+Clarification uses one automatic round per approved criteria version and at most three questions, prioritized by essentiality, conflicts/unknowns/partials and material usefulness. Existing detailed evidence and previously asked criteria are checked first. Requirements that cannot accept candidate reports or work samples go directly to recruiter review. The original lifetime cap of two historical rounds per application remains a hard stop; no automatic second round is started to chase unresolved answers. A single recruiter approval authorizes the exact questions, a 1–168-hour response deadline, and zero or one reminder before that deadline. Approval queues the initial invitation; it does not claim delivery. Submission automatically queues a leased worker continuation, independent of the original batch run. No candidate response is ever generated by the worker.
 
 Candidate invitation links are short-lived (automatic links at most 24 hours, candidate sessions at most one hour). The approved reminder creates a fresh short-lived invitation within the same question scope; the response deadline does not extend token expiry. Explicit token revocation and changed criteria close access. Submission retries with identical answers return the original receipt; changed resubmissions require an append-only factual correction. General portal access closes on submission, while the same unexpired session may read its own receipt or append one correction per answer before the deadline. That exception does not grant other candidate/recruiter reads. Further corrections require recruiter assistance.
 
@@ -143,34 +150,32 @@ In the candidate Interview tab, create a versioned interview plan with the exact
 
 The private scheduling portal lets the candidate offer dated windows and explicitly select a dated option. Expressions such as 'Thursday afternoon' require confirmation; no time is silently guessed. Asia/Jakarta is the default IANA zone. The API rejects nonexistent local times and ambiguous daylight-saving times without an explicit matching UTC offset. Scheduling intersects the candidate windows, all interviewer working hours, duration, buffers and calendar availability. Conflicts produce alternatives and require another explicit selection. Rescheduling updates the existing provider event with an ETag condition and sends one confirmation per accepted change. Cancellation/withdrawal reconciles the same event and queues one approved cancellation message. Interviewer calendars supply free/busy information. When the approved notification setting is enabled, Google adds only the approved interviewers as event attendees and sends them calendar invitations/updates. The candidate is deliberately not a Google attendee and receives only the approved Resend messages. When disabled, give interviewers access to the organizer calendar. Existing busy time on non-owned interviewer calendars is treated conservatively during overlapping reschedules because free/busy does not identify the event.
 
-The worker persists queued, provider-accepted, delivery-unknown, failed, disconnected/expired-credential and simulated results separately. A provider timeout never claims successful delivery or failure. Google retries GET the stored stable event ID and action/plan markers before any write; accepted inserts/updates/deletes are recovered without a second event or confirmation. The last provider read before a calendar write is a fresh availability query. Google offers no atomic free/busy-and-insert transaction, so an external actor can still book between those calls. Email retries reuse the exact payload and Resend key within the safe retention window; older unknown email outcomes require manual provider reconciliation. No email delivered/read state or delivery webhook is implemented.
+The worker persists queued, provider-accepted, delivery-unknown, failed, disconnected/expired-credential results separately. A provider timeout never claims successful delivery or failure. Google retries GET the stored stable event ID and action/plan markers before any write; accepted inserts/updates/deletes are recovered without a second event or confirmation. The last provider read before a calendar write is a fresh availability query. Google offers no atomic free/busy-and-insert transaction, so an external actor can still book between those calls. Email retries reuse the exact payload and Resend key within the safe retention window; older unknown email outcomes require manual provider reconciliation. No email delivered/read state or delivery webhook is implemented.
 
 ### Google OAuth setup
 
-Docker is optional. In both API and worker CMD environments set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, a stable `SESSION_SECRET` and `TOKEN_ENCRYPTION_KEY`. Generate the encryption key privately with:
+In both API and worker environments set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, a stable `SESSION_SECRET` and `TOKEN_ENCRYPTION_KEY`. Generate the encryption key privately with:
 
 ```cmd
 .venv\Scripts\python.exe -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
-Keep the key outside source control and shared by API/worker. Losing it makes stored tokens unreadable; retain it securely with database backups and rotate it through a controlled decrypt/re-encrypt procedure. LIVE refuses to store OAuth tokens without a configured encryption key. Local DEMO derives a development-only encryption key and never calls live providers.
+Keep the key outside source control and shared by API/worker. Losing it makes stored tokens unreadable; retain it securely with database backups and rotate it through a controlled decrypt/re-encrypt procedure. OAuth token storage refuses to work without a configured encryption key.
 
-Create a Google Cloud **Web application** OAuth client, enable the Calendar API, configure the consent screen and add dedicated **test users**. Register the exact callback URI, for example `http://127.0.0.1:8000/api/v1/oauth/google/callback` for loopback development or your HTTPS API callback for staging. Set `PUBLIC_APP_URL` to the actual app origin; LIVE email requires HTTPS. Use `COOKIE_SECURE=false` only for loopback HTTP and true for HTTPS. The CMD scripts inherit environment variables and do not auto-load `.env`; Compose consumes `.env`.
+Create a Google Cloud **Web application** OAuth client, enable the Calendar API, configure the consent screen and add dedicated **test users**. Register the exact callback URI, for example `https://your-host.example/api/v1/oauth/google/callback` for hosted use (loopback URIs like `http://127.0.0.1:8000/api/v1/oauth/google/callback` only for development). Set `PUBLIC_APP_URL` to the actual HTTPS app origin; live email requires HTTPS. Use `COOKIE_SECURE=false` only for loopback HTTP and `true` (the default) for HTTPS. The CMD scripts inherit environment variables and do not auto-load `.env`; Compose consumes `.env`.
 
 Requested scopes are `calendar.events.owned` (read/create/update/delete events on calendars owned by the connected account), `calendar.events.freebusy` (availability on accessible interviewer calendars), plus `openid email` to bind the verified Google account and prevent accidental account switching during active bookings. No full-calendar, contacts or profile/name scope is requested. In Settings, save the owned organizer calendar ID (`primary` by default), then choose **Connect Google Calendar** as an organization admin. OAuth state is one-time, expires in ten minutes, is bound to the admin session/browser, and uses PKCE. Access/refresh tokens and PKCE verifiers stay Fernet-encrypted server-side; credentials never enter browser storage or API responses. Callback query codes are redacted from access logging. Refresh/revocation failures produce explicit reconnect states; disconnect invalidates credentials locally and reports whether remote revocation was confirmed. A different Google account cannot replace an existing binding while coordination is active, even after local disconnect.
 
 Google uses `sendUpdates=all` only for the approved interviewer attendees (or `none` when that notification option is disabled and no previous attendee updates are needed). Event title, description and notification policy are included in the approved version; external participant changes become a conflict rather than a notification to an unapproved address. The candidate is excluded from Google attendees; the single Resend adapter handles candidate messages. The Google Calendar implementation follows [scope guidance](https://developers.google.com/workspace/calendar/api/auth), [server OAuth](https://developers.google.com/identity/protocols/oauth2/web-server), [account identity](https://developers.google.com/identity/openid-connect/openid-connect), and [ETag/idempotency guidance](https://developers.google.com/workspace/calendar/api/guides/version-resources).
 
-For live clarification and interview email, create an organization **email** provider connection in Settings with a verified `from_email`. Set these in the API/worker environment (CMD scripts do not auto-load `.env`; Compose consumes it):
+For live clarification and interview email, create an organization **email** provider connection in Settings with a verified `from_email`. Set this in the API/worker environment:
 
 ```cmd
 set PUBLIC_APP_URL=https://your-saring-host.example
 set SARING_PROVIDER_ORGANIZATIONUUIDWITHOUTDASHES_EMAIL=your-resend-api-key
 ```
 
-Use the exact `SARING_PROVIDER_<ORG_UUID_WITHOUT_DASHES_UPPERCASE>_EMAIL` variable name shown by the organization credential convention. Supply the real key server-side only. Resend must have the sender domain verified. The adapter calls the fixed HTTPS Resend endpoint with no redirects, a 20-second timeout, an immutable payload and a stable idempotency key. It stops automatic replay after 23 hours to stay within Resend's documented 24-hour idempotency retention; an ambiguous older attempt requires reconciliation. No live model/email/calendar credentials were exercised here. See [Resend idempotency documentation](https://resend.com/docs/dashboard/emails/idempotency-keys) and [send-email contract](https://resend.com/docs/api-reference/emails/send-email).
-
-To demonstrate the actual loop locally without Docker: start the API, worker and web CMD scripts; choose **Load clarification example** on Vacancies; run the agent; open **Synthetic Support Applicant / Clarification**; inspect and approve the complaint question and reminder policy. When the persisted DEMO mailbox appears, open **Open demo candidate portal** in a separate browser profile, continue with the private invitation, and supply your synthetic example. You may decline or choose an alternative. Saving a draft is not submission. Confirm submission, then return to HR: the worker updates findings and the review-ready brief automatically. The browser test enters a concrete complaint example, verifies unknown to partial with a candidate-reported response citation, and appends a factual correction. No email is transmitted in DEMO.
+Use the exact `SARING_PROVIDER_<ORG_UUID_WITHOUT_DASHES_UPPERCASE>_EMAIL` variable name shown by the organization credential convention. Supply the real key server-side only. Resend must have the sender domain verified. The adapter calls the fixed HTTPS Resend endpoint with no redirects, a 20-second timeout, an immutable payload and a stable idempotency key. It stops automatic replay after 23 hours to stay within Resend's documented 24-hour idempotency retention; an ambiguous older attempt requires reconciliation. See [Resend idempotency documentation](https://resend.com/docs/dashboard/emails/idempotency-keys) and [send-email contract](https://resend.com/docs/api-reference/emails/send-email).
 
 ## Optional Docker/PostgreSQL
 
@@ -179,31 +184,23 @@ copy .env.example .env
 docker compose up --build
 ```
 
-Open **http://localhost:8080**. Compose explicitly overrides the SQLite default with its PostgreSQL connection, runs migrations first, and mounts private file/session volumes. Only the web port is exposed on loopback. The supplied PostgreSQL password is for local development. Docker is not installed here, so Compose/PostgreSQL execution is unverified; direct CMD/SQLite API, worker, migrations and browser flow were exercised.
+Open **http://localhost:8080**. Compose explicitly overrides the SQLite default with its PostgreSQL connection, runs migrations first, and mounts the private file volume. Only the web port is exposed on loopback. The supplied PostgreSQL password is for local development; replace it for any shared deployment. Docker is not installed in the original development environment, so Compose/PostgreSQL execution is unverified; direct CMD/SQLite API, worker, migrations and browser flow were exercised.
 
-## API and checks
+## API
 
 See [API_CONTRACT.md](API_CONTRACT.md) for frontend integration, CSRF/session flow, pagination, schemas, state transitions and endpoint groups. OpenAPI is available at `/openapi.json` while the API runs.
 
+Build and parse checks:
+
 ```cmd
 npm.cmd run build
-.venv\Scripts\python.exe -m pytest backend -q
-npm.cmd run test:e2e
 ```
 
-Browser tests need all three local processes, an installed Chrome browser and the worker's OCR runtime for the scan test. The opt-in restart test is excluded from the normal run: stop the normal worker, then run `set SARING_RESTART_E2E=1` and `npm.cmd run test:e2e -- tests/restart.spec.ts`; it owns/restarts its worker and induces lease expiry after an actual process crash. For the real OCR backend test set `TESSERACT_CMD` and `TESSDATA_PREFIX` in the test CMD environment too; otherwise that one test explicitly skips. Tests use only synthetic applicant data. See [docs/TEST_REPORT.md](docs/TEST_REPORT.md) for exact outcomes and limitations.
+The demo-era pytest and Playwright suites were removed together with the demo fixtures they depended on; the live workflow parsers, bounded clarification and execution history checks run on every API startup and worker heartbeats. If you rebuild a test suite, write it against live adapters only (no demo fixtures exist anymore).
 
 No deployment, real applicant communication or credentialed provider validation has been performed. Enterprise deployment still needs operational choices for identity onboarding/password recovery, HTTPS, secret rotation, storage encryption, malware/process isolation, quotas, backups, retention/erasure policy and PostgreSQL concurrency/load testing. Do not commit secrets, original applicant files or databases.
 
-
-### Interview demo and live verification status
-
-Without Docker, start the three CMD launchers. Load the synthetic Customer Support example, run analysis, record a human shortlist, and open Interview. Generate/save/approve a brief, draft an interview plan and inspect the full invitation approval dialog. After approval, open **Open demo scheduling portal** in a separate browser profile. Offer explicit availability, select and confirm a dated option, then select a different option to reschedule. HR can cancel the same event. DEMO uses isolated database fixtures/mailboxes and makes no Google or Resend request, even if live credentials happen to exist in the environment.
-
-Live test-account checks **did not run**: no Google OAuth client/test-account consent or Resend test-domain credentials were provided. Automated HTTP mocks exercise OAuth exchange/refresh/expiry, Google free/busy and event CRUD/timeout reconciliation, and Resend idempotency. They validate application/provider contract handling, not a real Google/Resend deployment or inbox delivery. Required live checks: consent with a dedicated Google test user, successful refresh, free/busy on an accessible test interviewer calendar, booking/conflict/rescheduling/cancellation on an owned test calendar, and Resend provider-accepted IDs using approved test recipients. PostgreSQL/Compose concurrency remains unverified; real local Tesseract recognition is now verified on synthetic scans.
-# Persistent execution and retention (schema 009)
-
-Verified locally: 83 backend tests, seven browser scenarios, two additional focused cursor/reconnection checks, migration round-trip and the production build passed. Live provider accounts, PostgreSQL/Compose concurrency and production load remain unverified. Detailed results and changed files are in `IMPLEMENTATION_STATUS.md`.
+## Persistent execution and retention (schema 009)
 
 Workers persist separate per-application analysis jobs, clarification continuations and interview outbox actions. Batch `WorkflowRun.done` means its analysis jobs committed; it does not mean every candidate answered or every interview finished. Candidate and HR waits are durable workflow states and hold no worker lease. A response submission queues its continuation in the same transaction.
 

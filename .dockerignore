@@ -5,8 +5,7 @@ node_modules
 dist
 storage
 *.db
-test-results
-playwright-report
 __pycache__
-.pytest_cache
 .runtime
+docs
+reference

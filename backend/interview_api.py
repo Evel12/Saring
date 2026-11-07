@@ -12,25 +12,6 @@ from backend.db import get_db,now
 router=APIRouter(prefix="/api/v1",dependencies=[Depends(api.mutations)])
 
 
-@router.post("/demo/applications/{id}/calendar-conflict")
-def inject_demo_conflict(id:str,p=Depends(auth.recruiter),s=Depends(get_db)):
-    if not s.get(m.Organization,p.org_id).is_demo:raise HTTPException(403,"Conflict simulation is synthetic-only")
-    a=svc.own(s,m.Application,id,p)
-    coord=s.scalar(select(m.InterviewCoordination).where(m.InterviewCoordination.org_id==p.org_id,m.InterviewCoordination.application_id==a.id))
-    if not coord or not coord.offered_slots:raise HTTPException(409,"Candidate must first offer explicit availability")
-    slot=coord.offered_slots[0]
-    connection=s.scalar(select(m.ProviderConnection).where(m.ProviderConnection.org_id==p.org_id,m.ProviderConnection.provider=="google_calendar"))
-    if not connection:
-        connection=m.ProviderConnection(org_id=p.org_id,provider="google_calendar",state="demo",config={})
-        s.add(connection)
-    blocked=list(connection.config.get("_demo_busy",[]))
-    if not any(x["start"]==slot["start"] and x["end"]==slot["end"] for x in blocked):blocked.append({"start":slot["start"],"end":slot["end"]})
-    connection.config={**connection.config,"_demo_busy":blocked[-50:]}
-    svc.event(s,p,"demo.calendar_conflict","A synthetic calendar block was added after availability lookup. Selection will require real persisted conflict recovery.",a.vacancy_id,a.id)
-    s.commit()
-    return {"mode":"demo","blocked_slot_id":slot["id"]}
-
-
 class CancelInput(d.Input):
     reason:str=Field(min_length=1,max_length=1000)
 
@@ -67,7 +48,6 @@ def oauth_callback(request:Request,state:str="",code:str="",error:str="",s=Depen
 
 @router.get("/oauth/google/status")
 def oauth_status(p=Depends(auth.admin),s=Depends(get_db)):
-    if s.get(m.Organization,p.org_id).is_demo:return {"state":"demo","scopes":[],"detail":"Synthetic Google Calendar adapter; no OAuth/provider requests"}
     conn=s.scalar(select(m.ProviderConnection).where(m.ProviderConnection.org_id==p.org_id,m.ProviderConnection.provider=="google_calendar"))
     credential=s.scalar(select(m.OAuthCredential).where(m.OAuthCredential.connection_id==conn.id)) if conn else None
     state="disconnected" if not credential or credential.revoked_at else conn.state
@@ -81,9 +61,8 @@ def oauth_disconnect(p=Depends(auth.admin),s=Depends(get_db)):
     credential=s.scalar(select(m.OAuthCredential).where(m.OAuthCredential.connection_id==conn.id)) if conn else None
     token=None
     if credential:
-        if not s.get(m.Organization,p.org_id).is_demo:
-            try:data=oauth.decrypt(credential.encrypted_tokens);token=data.get("refresh_token") or data.get("access_token")
-            except oauth.CalendarConfiguration:pass
+        try:data=oauth.decrypt(credential.encrypted_tokens);token=data.get("refresh_token") or data.get("access_token")
+        except oauth.CalendarConfiguration:pass
         credential.revoked_at=now();credential.encrypted_tokens=""
     if conn:conn.state="disconnected"
     s.commit()
@@ -155,16 +134,6 @@ def retry(id:str,p=Depends(auth.recruiter),s=Depends(get_db)):
         raise HTTPException(409,"Email outcome cannot be safely replayed after provider idempotency retention; reconcile with the provider before renewing authorization")
     action.state="queued";action.attempts=0;action.available_at=now();action.error=""
     s.commit();return svc.public(action)
-
-
-@router.get("/demo/interview-mailbox")
-def mailbox(application_id:str,p=Depends(auth.recruiter),s=Depends(get_db)):
-    if not s.get(m.Organization,p.org_id).is_demo:raise HTTPException(403,"Synthetic mailbox is demo-only")
-    svc.own(s,m.Application,application_id,p)
-    coord=s.scalar(select(m.InterviewCoordination).where(m.InterviewCoordination.application_id==application_id))
-    if not coord:return {"items":[]}
-    rows=s.scalars(select(m.InterviewAction).where(m.InterviewAction.coordination_id==coord.id,m.InterviewAction.kind.in_(["invite","reminder","confirmation","cancel_confirmation"]),m.InterviewAction.state=="simulated").order_by(m.InterviewAction.created_at))
-    return {"items":[{"id":r.id,"kind":r.kind,"recipient":r.payload["to"],"subject":r.payload["subject"],"portal_url":flow.link(r.payload["invitation_id"],r.payload["origin"])} for r in rows]}
 
 
 @router.get("/candidate/applications/{id}/scheduling")

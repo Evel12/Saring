@@ -1,10 +1,29 @@
 """Strict request schemas; versioned outputs are derived from explicit public columns."""
 
+import re
 from typing import Literal, Generic, TypeVar, Any
 from pydantic import BaseModel, Field, ConfigDict, create_model, field_validator
 from sqlalchemy import JSON
 from uuid import UUID
 from backend import models as m
+
+# Criteria must describe observable work evidence, never protected traits.
+PROTECTED_TRAIT = re.compile(
+    r"\brace\b|\brac(ial|ism)\b|\bethnic\w*\b|religio\w*|\bgender\w*\b|marital|pregnan\w*"
+    r"|skin\s*colou?r|nationality|\bnative\b.*\blanguage\b|\b(muslim|christian|hindu|buddhist|catholic|jewish|atheist)\b"
+    r"|not\s+(black|white|asian|hispanic|indian|malay|arab)\b"
+    r"|(black|white|asian|hispanic|indian|malay|arab)\s+(skin|race|person|people|candidate|applicant|man|woman)",
+    re.I,
+)
+
+
+def professional_criterion(value):
+    if PROTECTED_TRAIT.search(value):
+        raise ValueError(
+            "Criteria may not reference protected traits (race, skin colour, religion, "
+            "gender, nationality, pregnancy, marital status). Describe observable work evidence instead."
+        )
+    return value
 
 
 class Input(BaseModel):
@@ -49,6 +68,11 @@ class RequirementInput(Input):
     def valid_uuid(cls, v):
         return str(UUID(v)) if v else None
 
+    @field_validator("description", "minimum_observable_expectation")
+    @classmethod
+    def professional_only(cls, v):
+        return professional_criterion(v)
+
 
 class RequirementProposal(Input):
     requirements: list[RequirementInput] = Field(min_length=1, max_length=30)
@@ -64,6 +88,12 @@ class VacancyPatch(Input):
     title: str | None = Field(default=None, min_length=1, max_length=160)
     description: str | None = Field(default=None, max_length=10000)
     state: Literal["draft", "published", "closed"] | None = None
+
+
+class ApplyLinkInput(Input):
+    rotate: bool = False
+    disable: bool = False
+    questions: list[str] | None = Field(default=None, max_length=12)
 
 
 class ApplicationInput(Input):
@@ -100,6 +130,10 @@ class FindingInput(Input):
 class QuestionInput(Input):
     requirement_id: str
     text: str = Field(min_length=1, max_length=1000)
+
+
+class LinkCheckInput(Input):
+    url: str = Field(min_length=8, max_length=500)
 
 
 class RoundInput(Input):
@@ -201,6 +235,10 @@ PRIVATE = {
     "storage_key",
     "credential_ref",
     "lease_token",
+    # Legacy columns retained for frozen migrations; always false, never in API output.
+    "is_demo",
+    "is_sample",
+    "synthetic",
 }
 
 
@@ -275,6 +313,7 @@ class BriefOut(BaseModel):
     vacancy_title: str
     requirement_version_id: str
     reassessment_required: bool
+    summary: str | None = None
     requirements: list[RequirementOut]
     findings: list[FindingDetailOut]
     evidence: list[EvidenceOut]

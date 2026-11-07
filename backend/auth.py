@@ -1,20 +1,17 @@
 """Argon2 passwords, signed cookies, revocable server sessions and scoped invitations."""
 
-import os, secrets, hashlib
+import os, secrets, hashlib, time
 from dataclasses import dataclass
 from pathlib import Path
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy import select, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from pwdlib import PasswordHash
 from backend.db import Session, get_db, now
 from backend import models as m
 
 passwords = PasswordHash.recommended()
 DUMMY_HASH = passwords.hash(secrets.token_urlsafe(32))
-MODE = os.getenv("SARING_MODE", "demo")
-if MODE not in ("demo", "live"):
-    raise RuntimeError("SARING_MODE must be demo or live")
 ORIGINS = [
     v.strip()
     for v in os.getenv(
@@ -35,18 +32,9 @@ def secret_key():
     key = os.getenv("SESSION_SECRET")
     if key and len(key) >= 32:
         return key
-    if MODE == "live":
-        raise RuntimeError(
-            "Set SESSION_SECRET to at least 32 random characters in LIVE"
-        )
-    path = Path(".runtime/session.key")
-    path.parent.mkdir(exist_ok=True)
-    try:
-        with path.open("x") as f:
-            f.write(secrets.token_urlsafe(48))
-    except FileExistsError:
-        pass
-    return path.read_text().strip()
+    raise RuntimeError(
+        "Set SESSION_SECRET to at least 32 random characters before starting"
+    )
 
 
 def csrf(request: Request):
@@ -75,21 +63,30 @@ def rate_limit(request, label, limit=15, window_seconds=300, identity=""):
         + identity
     )
     window = int(now() // window_seconds)
-    with Session() as s:
-        bucket = s.get(m.RateLimitBucket, (key, window))
-        if not bucket:
-            try:
-                s.add(m.RateLimitBucket(key=key, window=window, count=0))
+    # Transient SQLite write contention must degrade to a short causal retry,
+    # never to a 500 on login; the bucket stays exact across retry attempts.
+    for attempt in range(3):
+        try:
+            with Session() as s:
+                bucket = s.get(m.RateLimitBucket, (key, window))
+                if not bucket:
+                    try:
+                        s.add(m.RateLimitBucket(key=key, window=window, count=0))
+                        s.commit()
+                    except IntegrityError:
+                        s.rollback()
+                count = s.scalar(
+                    update(m.RateLimitBucket)
+                    .where(m.RateLimitBucket.key == key, m.RateLimitBucket.window == window)
+                    .values(count=m.RateLimitBucket.count + 1)
+                    .returning(m.RateLimitBucket.count)
+                )
                 s.commit()
-            except IntegrityError:
-                s.rollback()
-        count = s.scalar(
-            update(m.RateLimitBucket)
-            .where(m.RateLimitBucket.key == key, m.RateLimitBucket.window == window)
-            .values(count=m.RateLimitBucket.count + 1)
-            .returning(m.RateLimitBucket.count)
-        )
-        s.commit()
+            break
+        except OperationalError as exc:
+            if "database is locked" not in str(exc).lower() or attempt == 2:
+                raise
+            time.sleep(0.5 * (attempt + 1))
     if count > limit:
         raise HTTPException(
             429,
@@ -219,7 +216,11 @@ def login_session(s, request, org_id, user_id=None, invitation=None):
         invitation_id=invitation.id if invitation else None,
         scopes=invitation.scopes if invitation else [],
         expires_at=(
-            min(now() + 3600, invitation.expires_at) if invitation else now() + 8 * 3600
+            min(now() + 3600, invitation.expires_at) if invitation
+            # Recruiter/admin sessions: a working day of churn should not
+            # silently break lazy-loading tabs (clarification, interview) with
+            # "Authentication required" that no retry can fix.
+            else now() + 30 * 86400
         ),
     )
     s.add(row)

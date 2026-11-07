@@ -128,13 +128,10 @@ export function stage(row: Snapshot, jobs: Job[] = [], outbox: Outbox[] = []) {
           : "Retry approved action",
       attention: true,
     };
-  if (interview && ["booked", "simulated"].includes(interview.state))
+  if (interview && interview.state === "booked")
     return {
       index: 8,
-      status:
-        interview.state === "simulated"
-          ? "Demo interview recorded"
-          : "Interview booked",
+      status: "Interview booked",
       next: "Prepare for interview",
       attention: false,
     };

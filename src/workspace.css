@@ -43,25 +43,6 @@ a.secondary {
 .header-right select {
   max-width: 170px;
 }
-.demo-banner {
-  background: #fff5df;
-  border-bottom: 1px solid #ead8b3;
-  color: #795b23;
-  display: flex;
-  gap: 9px;
-  align-items: center;
-  padding: 8px 32px;
-  font-size: 11px;
-}
-.demo-banner > b {
-  font: 700 10px var(--mono);
-  letter-spacing: 1px;
-}
-.demo-banner a {
-  margin-left: auto;
-  text-decoration: underline;
-  font-size: 10px;
-}
 .app-nav {
   max-width: 1600px;
   margin: auto;
@@ -765,6 +746,69 @@ dialog {
 .checklist li {
   margin-bottom: 9px;
 }
+.progress-steps {
+  list-style: none;
+  margin: 12px 0;
+  padding: 0;
+  font-size: 12px;
+}
+.progress-steps li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 0;
+  color: var(--muted);
+}
+.progress-steps .step-marker {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  flex: none;
+}
+.progress-steps .step-done {
+  color: var(--text);
+}
+.progress-steps .step-done .step-marker {
+  background: var(--teal, #2a9d5c);
+  border-color: transparent;
+}
+.progress-steps .step-active {
+  color: var(--text);
+}
+.progress-steps .step-active .step-marker {
+  background: var(--accent);
+  border-color: transparent;
+  animation: progress-pulse 1.6s ease-in-out infinite;
+}
+.progress-steps .step-attention {
+  color: #b83a3a;
+}
+.progress-steps .step-attention .step-marker {
+  background: #b83a3a;
+  border-color: transparent;
+}
+.warn-hint {
+  color: #b83a3a;
+}
+.link-verify {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+.link-verify input {
+  flex: 1;
+  min-width: 0;
+}
+@keyframes progress-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
 .document-list {
   margin: 0 0 20px;
   list-style: none;
@@ -1166,15 +1210,6 @@ dialog {
   max-width: 760px;
   margin-top: 35px;
 }
-.portal-demo {
-  padding: 10px 13px;
-  background: #fff5df;
-  color: #7a5a1f;
-  font: 9px/1.7 var(--mono);
-  border: 1px solid #ead8b3;
-  border-radius: 5px;
-  margin: 20px 0;
-}
 .portal-card {
   padding: 30px;
 }
@@ -1341,9 +1376,6 @@ pre {
   .header-right .organization-name {
     display: none;
   }
-  .demo-banner span {
-    font-size: 10px;
-  }
   .wizard-steps > div {
     font-size: 10px;
     gap: 5px;
@@ -1362,21 +1394,6 @@ pre {
   }
   .header-right select {
     max-width: 100px;
-  }
-  .demo-banner {
-    padding: 8px 16px;
-    align-items: flex-start;
-    gap: 6px;
-    font-size: 10px;
-  }
-  .demo-banner a {
-    display: none;
-  }
-  .demo-banner svg {
-    margin-top: 2px;
-  }
-  .demo-banner span {
-    line-height: 1.6;
   }
   .app-nav {
     padding: 0 16px;
@@ -1746,9 +1763,6 @@ pre {
     font-size: 9px;
     line-height: 1.7;
   }
-  .portal-demo {
-    font-size: 8px;
-  }
   .notice p {
     font-size: 11px;
   }
@@ -1770,7 +1784,6 @@ pre {
 }
 @media print {
   .app-nav,
-  .demo-banner,
   .global-flash,
   .heading-actions,
   .detail-layout > aside,
@@ -1830,3 +1843,125 @@ pre {
   background: var(--amber);
 }
 .portal-heading {display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:20px}.portal-heading>.brand{margin-bottom:0}.portal-heading>select{width:auto;max-width:140px;font-size:11px;background:var(--surface)}.additional-upload{padding:15px;background:var(--surface-2);border:1px dashed var(--line);border-radius:5px;margin:18px 0;font-size:12px}.additional-upload input{margin-top:8px}
+`
+
+/* ---- AI progression bar ---- */
+.progress-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--line, rgba(0,0,0,.12));
+  overflow: hidden;
+  margin: 4px 0 6px;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent, #4d6bfe);
+  transition: width .6s ease;
+}
+.progress-fill.done { background: var(--teal, #2a9d5c); }
+.progress-fill.fail { background: #b83a3a; }
+.progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+/* ---- Agent activity timeline ---- */
+.activity-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 420px;
+  overflow-y: auto;
+}
+.activity-item {
+  display: flex;
+  gap: 10px;
+  padding: 9px 10px;
+  border-left: 2px solid transparent;
+  border-bottom: 1px solid var(--line, rgba(0,0,0,.06));
+}
+.activity-item:last-child { border-bottom: 0; }
+.activity-item .activity-icon {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: rgba(77,107,254,.08);
+  color: var(--accent, #4d6bfe);
+  display: grid;
+  place-items: center;
+}
+.activity-item.progress { opacity: .75; }
+.activity-item.err { border-left-color: #b83a3a; }
+.activity-item.err .activity-icon { background: rgba(184,58,58,.1); color: #b83a3a; }
+.activity-item.warn .activity-icon { background: rgba(194,132,11,.12); color: #b2820b; }
+.activity-body { min-width: 0; flex: 1; }
+.activity-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12px;
+}
+.activity-head .ts { color: var(--muted); font-variant-numeric: tabular-nums; }
+.activity-message {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.activity-item .term-muted { margin: 2px 0 0; font-size: 11px; }
+
+
+/* ---- Findings: strength cards & detail chips ---- */
+.strength-cards,
+.detail-chips {
+  list-style: none;
+  padding: 0;
+  margin: 14px 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 8px;
+}
+.strength-cards li {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(77, 107, 254, 0.05);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.strength-cards li svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--accent, #4d6bfe);
+}
+.detail-chips li {
+  padding: 10px 13px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent, #4d6bfe);
+  border-radius: 9px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+@media (max-width: 700px) {
+  .strength-cards,
+  .detail-chips { grid-template-columns: 1fr; }
+}
+
+/* ---- Explainer block ---- */
+.explainer summary { cursor: pointer; }
+.explainer ul { margin: 10px 0 0; padding-left: 18px; font-size: 12px; color: var(--muted); }
+.explainer li { margin-bottom: 7px; }
+.explainer b { color: var(--text); }
+
+
+.link-meta { font-size: 11.5px; color: var(--muted); margin: 4px 0 0; }
+.link-meta b { color: var(--text); }
+.unknown-source ul { margin: 6px 0 0; padding-left: 16px; font-size: 12px; }

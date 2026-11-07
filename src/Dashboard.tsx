@@ -183,9 +183,7 @@ export function CandidateTable({
                         <span>
                           <b>{label}</b>
                           <small>
-                            {row.candidate?.synthetic
-                              ? "Synthetic applicant"
-                              : a.id.slice(0, 8)}
+                            {a.id.slice(0, 8)}
                           </small>
                         </span>
                       </a>
@@ -246,7 +244,7 @@ export function CandidateTable({
         probability of hiring success.
       </div>
       {!rows.length && (
-        <Empty title="No applicants yet">{`Add CVs or ${"load synthetic applicants in DEMO"} to begin an evidence review.`}</Empty>
+        <Empty title="No applicants yet">Add CVs or upload applicant documents to begin an evidence review.</Empty>
       )}
     </>
   );
@@ -265,7 +263,6 @@ export function Dashboard({ id }: { id: string }) {
   const [file, setFile] = useState<File>();
   const [confirmed, setConfirmed] = useState(false);
   const [pendingUploadId, setPendingUploadId] = useState<string>();
-  const [fixture, setFixture] = useState("support");
   if (q.loading && !q.data)
     return <Loading label="Loading vacancy, applicants and workflow state…" />;
   if (q.error)
@@ -350,9 +347,6 @@ export function Dashboard({ id }: { id: string }) {
                 </button>
               </div>
               <div className="field-value">{v.title}</div>
-              {v.is_sample && (
-                <p className="sample-label">SYNTHETIC SAMPLE VACANCY</p>
-              )}
               <div className="field">
                 <label>Essential requirements</label>
                 <div className="tags">
@@ -393,6 +387,7 @@ export function Dashboard({ id }: { id: string }) {
               <p className="hint">
                 Edits create a new version. Existing review history is retained.
               </p>
+              <ApplyLinkPanel id={id} published={v.state === "published"} />
             </div>
             <div className="upload-section">
               <div className="label-row">
@@ -408,21 +403,9 @@ export function Dashboard({ id }: { id: string }) {
                       <FileText size={13} />
                       <button
                         className="file-link"
-                        title={
-                          doc.synthetic
-                            ? "Synthetic extraction only; no original binary"
-                            : doc.original_name
-                        }
+                        title={doc.original_name}
                         onClick={() =>
-                          doc.synthetic
-                            ? perform(async () =>
-                                navigate(
-                                  "/applications/" +
-                                    row.application.id +
-                                    "?tab=Evidence",
-                                ),
-                              )
-                            : perform(() => download(doc.id, doc.original_name))
+                          perform(() => download(doc.id, doc.original_name))
                         }
                       >
                         {blind
@@ -434,37 +417,15 @@ export function Dashboard({ id }: { id: string }) {
                   )),
                 )}
               </ul>
-              {org.is_demo && <div className="field"><label htmlFor="synthetic-file">Synthetic CV file</label><select id="synthetic-file" value={fixture} onChange={e=>setFixture(e.target.value)}><option value="support">Customer Support · readable DOCX</option><option value="developer">Developer · private GitHub · DOCX</option><option value="scan">Scanned support CV · PDF · real OCR</option><option value="unreadable">Unreadable PDF · recovery exercise</option><option value="hostile">Embedded hostile instructions · DOCX</option></select><button className="secondary" disabled={busy||v.state!=="published"} onClick={()=>perform(()=>post("/demo/vacancies/"+id+"/synthetic-file",{variant:fixture}),"Generated synthetic original saved privately. The worker will run the real parser; analysis and messages remain DEMO.")}>Add synthetic file</button><p className="hint">Closed synthetic catalog. No real applicant uploads. OCR requires a configured local runtime.</p></div>}
-              {org.is_demo ? (
-                <button
-                  className="upload-box"
-                  disabled={busy || !!rows.length || v.state !== "published"}
-                  onClick={() =>
-                    perform(
-                      () => post("/demo/vacancies/" + id + "/seed"),
-                      "Five synthetic applicants added. No real files were uploaded.",
-                    )
-                  }
-                >
-                  <Upload size={18} />
-                  <b>
-                    {rows.length
-                      ? "Synthetic applicants loaded"
-                      : "Load synthetic CVs"}
-                  </b>
-                  <span>Explicit demo adapter · 5 sample records</span>
-                </button>
-              ) : (
-                <button
-                  className="upload-box"
-                  disabled={v.state !== "published"}
-                  onClick={() => setModal("upload")}
-                >
-                  <Upload size={18} />
-                  <b>Add applicant & upload CV</b>
-                  <span>PDF / DOCX · up to 5 MB</span>
-                </button>
-              )}
+              <button
+                className="upload-box"
+                disabled={v.state !== "published"}
+                onClick={() => setModal("upload")}
+              >
+                <Upload size={18} />
+                <b>Add applicant & upload CV</b>
+                <span>PDF / DOCX · up to 5 MB</span>
+              </button>
               <button
                 className="primary run"
                 disabled={
@@ -895,5 +856,158 @@ export function Dashboard({ id }: { id: string }) {
         </Modal>
       )}
     </>
+  );
+}
+
+type ApplyLinkState = {
+  token: string | null;
+  enabled: boolean;
+  questions: string[];
+  state: string;
+  path: string | null;
+};
+
+// Recruiter-side control for the public apply link: create/copy/rotate/disable
+// plus the questions applicants answer. Stores nothing outside the API.
+function ApplyLinkPanel({ id, published }: { id: string; published: boolean }) {
+  const q = useLoad<ApplyLinkState>(
+    (signal) => request(`/vacancies/${id}/apply-link`, { signal }),
+    [id],
+  );
+  const [local, setLocal] = useState<ApplyLinkState>();
+  const [busy, setBusy] = useState(false);
+  const [flash, setFlash] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [questions, setQuestions] = useState<string[]>([]);
+  const state = local || q.data;
+  if (q.loading && !q.data) return null;
+  async function act(body: Record<string, unknown>, message: string) {
+    if (busy) return;
+    setBusy(true);
+    setFlash("");
+    try {
+      const next = await post<ApplyLinkState>(
+        "/vacancies/" + id + "/apply-link",
+        body,
+      );
+      setLocal(next);
+      setQuestions(next.questions);
+      setEditing(false);
+      setFlash(message);
+    } catch (e) {
+      setFlash((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  function copyLink(path: string) {
+    const url = location.origin + location.pathname + path;
+    navigator.clipboard
+      .writeText(url)
+      .then(() => setFlash("Link copied to clipboard."))
+      .catch(() => setFlash(url));
+  }
+  return (
+    <div className="field" style={{ borderTop: "1px solid var(--border, #ddd0)", paddingTop: 12 }}>
+      <div className="label-row">
+        <label>Public apply link</label>
+        {state?.enabled && <Badge tone="green">live</Badge>}
+      </div>
+      {state?.token && state.path ? (
+        <>
+          <p className="hint" style={{ margin: "4px 0" }}>
+            Anyone with this link can apply without an account:
+          </p>
+          <code
+            className="tiny mono"
+            style={{ display: "block", wordBreak: "break-all", marginBottom: 8 }}
+          >
+            {location.origin + location.pathname + state.path}
+          </code>
+          <div className="label-row">
+            <button className="secondary" onClick={() => copyLink(state.path!)}>
+              Copy link
+            </button>
+            <button
+              className="text-button"
+              onClick={() => act({ rotate: true, questions: state.questions }, "New link created; the old one no longer accepts applications.")}
+              disabled={busy}
+            >
+              Regenerate
+            </button>
+            <button
+              className="text-button"
+              onClick={() => act({ disable: true }, "Apply link disabled — the old URL no longer works.")}
+              disabled={busy}
+            >
+              Disable
+            </button>
+          </div>
+        </>
+      ) : (
+        <p className="hint" style={{ margin: "4px 0" }}>
+          No public link yet.{published ? "" : " Publish the vacancy first."}
+        </p>
+      )}
+      {editing ? (
+        <div style={{ display: "grid", gap: 6, margin: "8px 0" }}>
+          {questions.map((text, i) => (
+            <span key={i} style={{ display: "flex", gap: 6 }}>
+              <input
+                value={text}
+                maxLength={300}
+                onChange={(e) =>
+                  setQuestions((qs) => qs.map((x, j) => (j === i ? e.target.value : x)))
+                }
+              />
+              <button
+                className="text-button"
+                type="button"
+                onClick={() => setQuestions((qs) => qs.filter((_, j) => j !== i))}
+              >
+                remove
+              </button>
+            </span>
+          ))}
+          {questions.length < 12 && (
+            <button
+              className="text-button"
+              type="button"
+              onClick={() => setQuestions((qs) => [...qs, ""])}
+            >
+              + Add question
+            </button>
+          )}
+          <div className="label-row">
+            <button
+              className="primary"
+              disabled={busy}
+              onClick={() => act({ questions }, "Apply link saved.")}
+            >
+              Save questions
+            </button>
+            <button className="secondary" onClick={() => setEditing(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button className="text-button" onClick={() => {
+          setQuestions(state?.questions || []);
+          setEditing(true);
+        }}>
+          {state?.questions?.length
+            ? `Edit questions (${state.questions.length})`
+            : state?.token
+              ? "Add questions"
+              : "Create apply link"}
+        </button>
+      )}
+      {flash && (
+        <p className="hint" role="status" style={{ margin: "6px 0 0" }}>
+          {flash}
+        </p>
+      )}
+    </div>
   );
 }

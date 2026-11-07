@@ -180,7 +180,7 @@ def select_slot(s,p,a,data):
     if not slot:raise HTTPException(409,"Option is stale or was not offered")
     if coord.booked_slot and coord.booked_slot["start"]==slot["start"] and coord.booked_slot["end"]==slot["end"]:
         response_once(s,coord,plan,data.client_key,content)
-        coord.state="simulated" if s.get(m.Organization,coord.org_id).is_demo else "booked"
+        coord.state="booked"
         return coord
     response_once(s,coord,plan,data.client_key,content)
     coord.selection_version+=1;coord.selected_slot=slot;coord.state="booking_queued";coord.error=""
@@ -219,7 +219,7 @@ def transmit(s,action,coord,plan):
 
 
 def process(s,action,coord,plan):
-    a=s.get(m.Application,coord.application_id);demo=s.get(m.Organization,coord.org_id).is_demo
+    a=s.get(m.Application,coord.application_id)
     p=auth.Principal(coord.org_id,None,"worker","")
     cancellation=action.kind in ("cancel","cancel_confirmation")
     if not cancellation:
@@ -236,10 +236,10 @@ def process(s,action,coord,plan):
         if action.kind in ("invite","reminder") and (coord.deadline<=now() or s.get(m.CandidateInvitation,action.payload["invitation_id"]).expires_at<=now()):
             raise CalendarConfiguration("Scheduling invitation expired; explicit recruiter renewal required")
         result=transmit(s,action,coord,plan)
-        action.provider_id=result["id"];action.state="simulated" if demo else "provider_accepted"
+        action.provider_id=result["id"];action.state="provider_accepted"
         if action.kind in ("invite","reminder") and coord.state=="queued":coord.state="waiting_availability"
     elif action.kind in ("book","reschedule","cancel"):
-        recovered=calendar.reconcile(s,coord,plan,action) if not demo else False
+        recovered=calendar.reconcile(s,coord,plan,action)
         if not recovered and action.kind!="cancel":
             slot=action.payload["slot"]
             busy=calendar.busy(s,coord,plan.content,plan.content["start_epoch"]-3600,plan.content["end_epoch"]+3600)
@@ -248,14 +248,14 @@ def process(s,action,coord,plan):
                 action.state="conflict";action.error=coord.error
                 svc.event(s,p,"interview.conflict",coord.error,a.vacancy_id,a.id);return
         result={"id":coord.provider_event_id} if recovered else calendar.apply(s,coord,plan,action,cancel=action.kind=="cancel")
-        action.provider_id=result["id"];action.state="simulated" if demo else "provider_accepted"
+        action.provider_id=result["id"];action.state="provider_accepted"
         if action.kind=="cancel":
             coord.state="cancelled"
             enqueue(s,coord,plan,"cancel_confirmation","cancel-confirmation:"+coord.id,mail_payload(s,coord,plan,"cancel_confirmation",coord.booked_slot))
             legacy=s.scalar(select(m.Interview).where(m.Interview.org_id==coord.org_id,m.Interview.external_id==coord.provider_event_id))
             if legacy:legacy.state="cancelled"
         else:
-            coord.booked_slot=action.payload["slot"];coord.state="simulated" if demo else "booked";coord.error=""
+            coord.booked_slot=action.payload["slot"];coord.state="booked";coord.error=""
             enqueue(s,coord,plan,"confirmation","confirmation:"+action.id,mail_payload(s,coord,plan,"confirmation",coord.booked_slot))
             legacy=s.scalar(select(m.Interview).where(m.Interview.org_id==coord.org_id,m.Interview.external_id==coord.provider_event_id))
             if not legacy:

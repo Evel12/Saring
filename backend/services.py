@@ -22,7 +22,7 @@ def public(row):
     return {
         c.name: getattr(row, c.name)
         for c in row.__table__.columns
-        if c.name not in dto.PRIVATE and c.name not in {"encrypted_tokens", "encrypted_verifier", "state_hash"}
+        if c.name not in dto.PRIVATE
     }
 
 
@@ -51,9 +51,9 @@ def event(s, p, kind, message, vacancy_id=None, application_id=None, run_id=None
     # Routine metadata uses a closed vocabulary; never copy tool payloads/model responses.
     safe = {}
     for key, value in (details or {}).items():
-        if key in {"tool", "result", "error_code"} and isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_.:-]{1,80}", value):
+        if key in {"tool", "result", "error_code", "step"} and isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_.:-]{1,80}", value):
             safe[key] = value
-        elif key in {"duration_seconds", "attempt"} and isinstance(value, (int, float)) and 0 <= value < 1e12:
+        elif key in {"duration_seconds", "attempt", "index", "total", "documents", "evidence"} and isinstance(value, (int, float)) and 0 <= value < 1e12:
             safe[key] = value
     s.info.setdefault("pending_activity", []).append(dict(
             org_id=p.org_id,
@@ -269,16 +269,11 @@ def change_vacancy(s, p, v, body):
     return v
 
 
-def create_application(s, p, body, synthetic=False):
+def create_application(s, p, body):
     v = own(s, m.Vacancy, body.vacancy_id, p)
     if v.state != "published" or not v.active_requirement_version_id:
         raise HTTPException(
             409, "Applications require a published vacancy with approved criteria"
-        )
-    org = s.get(m.Organization, p.org_id)
-    if org.is_demo and not synthetic:
-        raise HTTPException(
-            403, "Demo permits synthetic applicants only; use the seed endpoint"
         )
     c = (
         own(s, m.Candidate, body.candidate_id, p)
@@ -287,7 +282,6 @@ def create_application(s, p, body, synthetic=False):
             org_id=p.org_id,
             display_name=body.display_name,
             email=body.email,
-            synthetic=synthetic,
         )
     )
     s.add(c)
@@ -629,11 +623,6 @@ def create_run(s, p, v, reextract=False):
 
 
 def store_upload(s, p, a, data, filename, content_type):
-    org = s.get(m.Organization, p.org_id)
-    if org.is_demo:
-        raise HTTPException(
-            403, "Demo accepts only synthetic documents from the seed endpoint"
-        )
     if not data or len(data) > 5 * 1024 * 1024:
         raise HTTPException(413, "Upload must be 1 byte to 5 MB")
     name = re.split(r"[/\\]", filename or "")[-1][:180]
@@ -689,65 +678,39 @@ def store_upload(s, p, a, data, filename, content_type):
     return row
 
 
-def seed_applicants(s, p, v):
-    org = s.get(m.Organization, p.org_id)
-    if not org.is_demo:
-        raise HTTPException(403, "Synthetic seed is demo-only")
-    if s.scalar(select(m.Application).where(m.Application.vacancy_id == v.id)):
-        raise HTTPException(409, "Vacancy already has applicants")
-    for i, name in enumerate(
-        [
-            "Rina Kartika",
-            "Dimas Pratama",
-            "Ayu Lestari",
-            "Bagas Nugroho",
-            "Sari Wulandari",
-        ]
-    ):
-        a = create_application(
-            s,
-            p,
-            dto.ApplicationInput(vacancy_id=v.id, display_name=name, email="demo-"+str(i)+"@example.test"),
-            synthetic=True,
-        )
-        text = "\n".join(
-            "Skills: " + r.description + ". Experience: synthetic project contribution."
-            for n, r in enumerate(requirements(s, v.active_requirement_version_id))
-            if (i + n) % 3 != 1
-        )
-        d = m.Document(
-            org_id=p.org_id,
-            application_id=a.id,
-            original_name="cv_" + name.lower().replace(" ", "_") + ".pdf",
-            storage_key="synthetic-" + uid(),
-            media_type="application/pdf",
-            size_bytes=0,
-            sha256=hashlib.sha256(text.encode()).hexdigest(),
-            synthetic=True,
-        )
-        s.add(d)
-        s.flush()
-        s.add(
-            m.ExtractionVersion(
-                org_id=p.org_id,
-                document_id=d.id,
-                version=1,
-                engine="synthetic-v1",
-                passages=[{"page": 1, "paragraph": None, "text": text}],
-                limitations="Deterministic synthetic data. Not a real applicant document.",
-            )
-        )
-    event(
-        s,
-        p,
-        "demo.seeded",
-        "Five synthetic applications created. No real documents, emails or calendar calls.",
-        v.id,
-    )
-
-
 def brief(s, p, a):
     v = own(s, m.Vacancy, a.vacancy_id, p)
+    
+    # Latest persisted summary, from the insights store first (what the
+    # Findings tab shows), falling back to the summary event of this or an
+    # earlier run for applications reviewed before that table existed.
+    insight = s.scalar(
+        select(m.AnalysisInsight)
+        .where(
+            m.AnalysisInsight.org_id == p.org_id,
+            m.AnalysisInsight.application_id == a.id,
+            m.AnalysisInsight.kind == "summary",
+        )
+        .order_by(m.AnalysisInsight.created_at.desc())
+        .limit(1)
+    )
+    summary = insight.text if insight and (
+        len(insight.text) >= 60
+        or insight.text.startswith("Neutral source-grounded background")
+    ) else None
+    if not summary:
+        summary_event = s.scalar(
+            select(m.WorkflowEvent)
+            .where(
+                m.WorkflowEvent.org_id == p.org_id,
+                m.WorkflowEvent.application_id == a.id,
+                m.WorkflowEvent.kind == "analysis.summary"
+            )
+            .order_by(m.WorkflowEvent.created_at.desc())
+            .limit(1)
+        )
+        summary = summary_event.details.get("summary") if summary_event else None
+
     fs = list(
         s.scalars(
             select(m.Finding).where(
@@ -764,6 +727,11 @@ def brief(s, p, a):
         "vacancy_title": v.title,
         "requirement_version_id": a.requirement_version_id,
         "reassessment_required": a.reassessment_required,
+        # Answers submitted through the public apply link; empty for manual
+        # uploads. Displayed verbatim on the Overview tab — never summarized
+        # by the model as if it were verified evidence.
+        "intro_answers": a.intro_answers or {},
+        "summary": summary,
         "requirements": [public(r) for r in requirements(s, a.requirement_version_id)],
         "findings": [finding_view(s, f) for f in fs],
         "evidence": [

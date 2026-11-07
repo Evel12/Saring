@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.cors import CORSMiddleware
 from backend.db import engine
-from backend import auth, api, compat, frontend_api, interview_api
+from backend import auth, api, compat, frontend_api, interview_api, apply_api
 
 
 class PortalAccessFilter(logging.Filter):
@@ -32,7 +32,7 @@ logging.getLogger("uvicorn.access").addFilter(PortalAccessFilter())
 async def lifespan(app):
     with engine.connect() as c:
         revision = c.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        if revision != "010":
+        if revision != "013":
             raise RuntimeError(
                 "Run python -m alembic upgrade head before starting the API"
             )
@@ -45,11 +45,13 @@ app.add_middleware(
     SessionMiddleware,
     secret_key=auth.secret_key(),
     session_cookie="saring_session",
-    max_age=8 * 3600,
+    # Matches the persisted session's 30-day TTL in auth.login_session; a
+    # shorter browser-side max_age silently invalidates the cookie while the
+    # server-side row is still valid, which is what turned lazily-requested
+    # tabs (Clarification, Interview) into spurious "Authentication required".
+    max_age=30 * 86400,
     same_site="strict",
-    https_only=os.getenv(
-        "COOKIE_SECURE", "true" if auth.MODE == "live" else "false"
-    ).lower()
+    https_only=os.getenv("COOKIE_SECURE", "true").lower()
     == "true",
 )
 app.add_middleware(
@@ -75,6 +77,19 @@ async def security_headers(request: Request, call_next):
     return response
 
 
+# Unhandled server errors previously became FastAPI's plain-text
+# "Internal Server Error", which the frontend cannot interpret — it degraded
+# into the vague "The server could not complete this request." Turning every
+# unhandled exception into a JSON body keeps the UI's error handling truthful.
+@app.exception_handler(Exception)
+async def unhandled_exception(request: Request, exc: Exception):
+    logging.getLogger("saring").exception("Unhandled error at %s", request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "The server hit an unexpected error on this request; it is logged. Try again shortly."},
+    )
+
+
 @app.exception_handler(IntegrityError)
 async def conflict(request, exc):
     return JSONResponse(
@@ -92,19 +107,21 @@ async def invalid(request, exc):
 
 @app.get("/api/health")
 def health():
+    from backend import ai_config
     with engine.connect() as c:
         c.execute(text("SELECT 1"))
+    cfg = ai_config.config()
     return {
-        "mode": auth.MODE,
-        "schema": "010",
+        "schema": "013",
+        "mode": "live",
         "model": (
             "configured"
-            if os.getenv("OPENAI_API_KEY") and os.getenv("OPENAI_MODEL")
+            if ai_config.available(cfg)
             else "not configured"
         ),
-        "calendar": (
-            "synthetic" if auth.MODE == "demo" else "organization connection required"
-        ),
+        "provider": cfg["provider"] if cfg else "none",
+        "model_name": cfg["model"] if cfg else "",
+        "calendar": "organization connection required",
     }
 
 
@@ -113,3 +130,5 @@ app.include_router(frontend_api.router)
 app.include_router(interview_api.router)
 app.include_router(compat.router)
 app.include_router(compat.portal_router)
+# Public apply link (no login; token-in-URL authentication).
+app.include_router(apply_api.router)
