@@ -20,7 +20,51 @@ import {
   type JobInputErrors,
   type JobSlotInput,
 } from "@/lib/job-input";
-import { createJob } from "../actions";
+import { ApiError, post, request } from "@/lib/api";
+import type { Page, Vacancy, Version } from "@/lib/types";
+
+const criterion = (skill: string, importance: "essential" | "preferred") => ({
+  description: skill,
+  importance,
+  acceptable_evidence_types: ["candidate_report", "document", "work_sample"],
+  minimum_observable_expectation: `Pengalaman nyata dengan ${skill}: proyek atau pekerjaan dan kontribusi pribadi pelamar.`,
+  clarification_permitted: true,
+});
+
+// Lowongan baru langsung dibuka: buat, setujui kriteria (klik HR ini = persetujuan),
+// publikasikan, lalu aktifkan link lamaran.
+async function createJob(input: JobInput) {
+  const toSeconds = (iso: string) => Date.parse(iso) / 1000;
+  const vacancy = await post<Vacancy>("/vacancies", {
+    title: input.title.trim(),
+    description: input.description.trim(),
+    department: input.department,
+    employment_type: input.type,
+    location: input.location.trim(),
+    requirements: [
+      ...input.requiredSkills.map((s) => criterion(s, "essential")),
+      ...input.niceToHaveSkills.map((s) => criterion(s, "preferred")),
+    ],
+    slots: input.slots.map((s) => ({
+      starts_at: toSeconds(s.start),
+      ends_at: toSeconds(s.end),
+    })),
+  });
+  const versions = await request<Page<Version>>(
+    `/vacancies/${vacancy.id}/requirement-versions`,
+  );
+  await post(`/requirement-versions/${versions.items[0].id}/approve`, {
+    rationale: "Disetujui HR saat membuat lowongan.",
+  });
+  await request(`/vacancies/${vacancy.id}`, {
+    method: "PATCH",
+    body: { state: "published" },
+  });
+  await post(`/vacancies/${vacancy.id}/apply-link`, {
+    questions: ["Ceritakan singkat kenapa kamu tertarik dengan posisi ini."],
+  });
+  return vacancy.id;
+}
 
 const FIELD_ORDER: [keyof JobInputErrors, string][] = [
   ["title", "job-title"],
@@ -118,7 +162,7 @@ export function JobForm({ today }: { today: string }) {
   const [slotError, setSlotError] = useState("");
   const [errors, setErrors] = useState<JobInputErrors>({});
   const [sending, setSending] = useState(false);
-  const [sendFailed, setSendFailed] = useState(false);
+  const [sendFailed, setSendFailed] = useState<string | false>(false);
 
   function clearError(field: keyof JobInputErrors) {
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: undefined }));
@@ -180,15 +224,12 @@ export function JobForm({ today }: { today: string }) {
     if (Object.keys(next).length) return focusFirstError(next);
     setSending(true);
     try {
-      const result = await createJob(input);
-      if (result.ok) {
-        router.push(`/dashboard/jobs/${result.id}?baru=1`);
-        return;
-      }
-      setErrors(result.errors);
-      focusFirstError(result.errors);
-    } catch {
-      setSendFailed(true);
+      const id = await createJob(input);
+      router.push(`/dashboard/jobs/${id}?baru=1`);
+      router.refresh();
+      return;
+    } catch (err) {
+      setSendFailed(err instanceof ApiError ? err.message : "server tidak terhubung");
     }
     setSending(false);
   }
@@ -408,6 +449,7 @@ export function JobForm({ today }: { today: string }) {
           <span>
             Lowongan belum tersimpan. Isian kamu masih ada di sini, coba lagi
             sebentar lagi.
+            {sendFailed && <small> ({sendFailed})</small>}
           </span>
         </div>
       )}

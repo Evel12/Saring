@@ -1,6 +1,7 @@
-// Draf dan pengiriman undangan tiruan. Saat backend siap, ganti isi
-// sendInvitation dengan panggilan API yang mengirim email sungguhan.
-import type { Candidate } from "./demo";
+// Draf undangan interview + link jadwal pribadi dari backend.
+// Email belum dikirim otomatis (butuh provider email); HR mengirimnya lewat aplikasi email.
+import { post } from "./api";
+import type { Candidate } from "./candidates";
 
 export const SCHEDULE_LINK_PLACEHOLDER = "{link jadwal}";
 
@@ -34,11 +35,20 @@ export function draftError(draft: InvitationDraft) {
     return `Isi email harus memuat ${SCHEDULE_LINK_PLACEHOLDER} supaya pelamar bisa memilih jadwal.`;
 }
 
-export async function sendInvitation(
-  candidate: Candidate,
-  _draft: InvitationDraft,
-  isRetry: boolean,
-) {
-  await new Promise((resolve) => setTimeout(resolve, 800));
-  return !(candidate.emailFailsOnce && !isRetry);
+export const scheduleUrl = (c: Pick<Candidate, "id" | "scheduleToken">) =>
+  c.scheduleToken ? `${window.location.origin}/schedule/${c.id}.${c.scheduleToken}` : "";
+
+/** Membuat link jadwal pribadi (butuh status shortlist di backend). */
+export async function sendInvitation(candidate: Candidate) {
+  try {
+    await post(`/applications/${candidate.id}/schedule-link`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function mailtoFor(candidate: Candidate, draft: InvitationDraft) {
+  const body = draft.body.replace(SCHEDULE_LINK_PLACEHOLDER, scheduleUrl(candidate));
+  return `mailto:${encodeURIComponent(candidate.email)}?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(body)}`;
 }

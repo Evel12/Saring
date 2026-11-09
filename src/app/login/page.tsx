@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Funnel } from "lucide-react";
-import { SESSION_COOKIE, safeNext } from "@/lib/demo-auth";
+import { safeNext, type Me } from "@/lib/session";
+import { serverGet } from "@/lib/server-api";
 import { LoginForm } from "./login-form";
 import "../(public)/public.css";
 
@@ -18,7 +18,8 @@ export default async function LoginPage({
 }) {
   const { next } = await searchParams;
   const target = safeNext(Array.isArray(next) ? next[0] : next);
-  if ((await cookies()).has(SESSION_COOKIE)) redirect(target);
+  const me = await serverGet<Me>("/auth/me").catch(() => null);
+  if (me?.user_id) redirect(target);
 
   return (
     <div className="app-shell public-shell">

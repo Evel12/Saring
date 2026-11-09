@@ -195,11 +195,29 @@ def propose(s, p, v, items):
 
 
 def create_vacancy(s, p, body):
-    v = m.Vacancy(org_id=p.org_id, title=body.title, description=body.description)
+    v = m.Vacancy(
+        org_id=p.org_id,
+        title=body.title,
+        description=body.description,
+        department=body.department,
+        employment_type=body.employment_type,
+        location=body.location,
+    )
     s.add(v)
     s.flush()
     propose(s, p, v, body.requirements)
+    add_slots(s, p, v, body.slots)
     return v
+
+
+def add_slots(s, p, v, slots):
+    for slot in slots:
+        if slot.starts_at <= now():
+            raise HTTPException(422, "Interview slots must be in the future")
+        if not 0 < slot.ends_at - slot.starts_at <= 4 * 3600:
+            raise HTTPException(422, "Interview slots must last between 1 minute and 4 hours")
+        s.add(m.InterviewSlot(org_id=p.org_id, vacancy_id=v.id, starts_at=slot.starts_at, ends_at=slot.ends_at))
+    s.flush()
 
 
 def approve_version(s, p, id, rationale=""):

@@ -78,16 +78,32 @@ class RequirementProposal(Input):
     requirements: list[RequirementInput] = Field(min_length=1, max_length=30)
 
 
+class SlotInput(Input):
+    starts_at: float
+    ends_at: float
+
+
 class VacancyInput(Input):
     title: str = Field(min_length=1, max_length=160)
     description: str = Field(default="", max_length=10000)
     requirements: list[RequirementInput] = Field(min_length=1, max_length=30)
+    department: str | None = Field(default=None, max_length=80)
+    employment_type: str | None = Field(default=None, max_length=40)
+    location: str | None = Field(default=None, max_length=80)
+    slots: list[SlotInput] = Field(default_factory=list, max_length=50)
+
+
+class SlotsInput(Input):
+    slots: list[SlotInput] = Field(min_length=1, max_length=50)
 
 
 class VacancyPatch(Input):
     title: str | None = Field(default=None, min_length=1, max_length=160)
     description: str | None = Field(default=None, max_length=10000)
     state: Literal["draft", "published", "closed"] | None = None
+    department: str | None = Field(default=None, max_length=80)
+    employment_type: str | None = Field(default=None, max_length=40)
+    location: str | None = Field(default=None, max_length=80)
 
 
 class ApplyLinkInput(Input):
@@ -288,6 +304,7 @@ OutboxOut = output(m.OutboxAction)
 MetricOut = output(m.Metric)
 CandidateOut = output(m.Candidate)
 MembershipOut = output(m.Membership)
+SlotOut = output(m.InterviewSlot)
 DecisionOut = output(m.RecruiterDecision)
 ExtractionOut = output(m.ExtractionVersion)
 

@@ -11,7 +11,7 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
-import type { Candidate } from "@/lib/demo";
+import type { Candidate } from "@/lib/candidates";
 import { useDashboard } from "./dashboard-context";
 import { IndicatorGroup } from "./indicator-group";
 
@@ -94,7 +94,7 @@ export function CandidateTable({
         (filter === "Semua kandidat" || c.status === filter) &&
         (!roleFilter || c.role === roleFilter),
     )
-    .sort((a, b) => (sortHigh ? b.score - a.score : a.id - b.id));
+    .sort((a, b) => (sortHigh ? b.score - a.score : a.appliedAt.localeCompare(b.appliedAt)));
 
   function exportCandidates() {
     const data = [
@@ -249,7 +249,7 @@ export function CandidateTable({
                     <span>
                       <strong>{c.name}</strong>
                       <small>
-                        {full ? `${c.experience} pengalaman` : c.role}
+                        {full && c.experience ? `${c.experience} pengalaman` : c.role}
                       </small>
                     </span>
                   </Link>

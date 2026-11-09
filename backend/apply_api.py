@@ -36,12 +36,20 @@ def _vacancy(vacancy_id: str, token: str, s) -> m.Vacancy:
 def apply_view(vacancy_id: str, token: str, s=Depends(get_db)):
     v = _vacancy(vacancy_id, token, s)
     org = s.get(m.Organization, v.org_id)
+    criteria = s.scalars(
+        select(m.Requirement).where(m.Requirement.version_id == v.active_requirement_version_id)
+    ).all()
     return {
         "vacancy_id": v.id,
         "title": v.title,
         "company": (org.name if org else "") or "",
         "description": (v.description or "")[:5000],
         "questions": v.intro_questions or [],
+        "department": v.department or "",
+        "employment_type": v.employment_type or "",
+        "location": v.location or "",
+        "required_skills": [c.description for c in criteria if c.importance == "essential"],
+        "preferred_skills": [c.description for c in criteria if c.importance == "preferred"],
     }
 
 

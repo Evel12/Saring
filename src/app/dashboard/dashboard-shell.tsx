@@ -37,10 +37,10 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useDashboard } from "./dashboard-context";
-import { DEMO_EMAIL } from "@/lib/demo-auth";
+import { post } from "@/lib/api";
+import { roleLabel, type Me } from "@/lib/session";
 import { playIntro, resetIntro } from "@/lib/intro";
 import { IndicatorGroup } from "./indicator-group";
-import { logout } from "../login/actions";
 import { Avatar } from "./candidate-table";
 
 const CANDIDATES = "/dashboard/candidates";
@@ -59,7 +59,17 @@ function isActive(pathname: string, href: string) {
     : pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function DashboardShell({ children }: { children: ReactNode }) {
+export function DashboardShell({ children, me }: { children: ReactNode; me: Me }) {
+  const org =
+    me.memberships.find((m) => m.org_id === me.organization_id)
+      ?.organization_name ?? "Organisasi";
+  const role = roleLabel(me.role);
+  const initials = org.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+  async function logout() {
+    await post("/auth/logout").catch(() => undefined);
+    resetIntro();
+    window.location.assign("/login");
+  }
   const router = useRouter();
   const pathname = usePathname();
   const {
@@ -184,13 +194,13 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         <button
           className="workspace-switch"
           onClick={() =>
-            setToast("Kamu berada di workspace demo Tim Rekrutmen.")
+            setToast(`Kamu berada di workspace ${org}.`)
           }
         >
-          <span className="workspace-avatar">S</span>
+          <span className="workspace-avatar">{initials[0]}</span>
           <span>
-            <strong>Tim Rekrutmen</strong>
-            <small>Workspace demo</small>
+            <strong>{org}</strong>
+            <small>{role}</small>
           </span>
           <ChevronDown size={14} />
         </button>
@@ -257,7 +267,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               <strong>Asistenmu, Saring</strong>
               <span>
                 <i />
-                Mode demo aktif
+                Terhubung ke backend
               </span>
             </div>
             <span className="tiny-star">✧</span>
@@ -272,10 +282,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             <ArrowUpRight size={14} />
           </button>
           <div className="sidebar-user">
-            <Avatar initials="AP" color="sand" />
+            <Avatar initials={initials} color="sand" />
             <div>
-              <strong>Andini Putri</strong>
-              <small>HR Manager</small>
+              <strong>{org}</strong>
+              <small>{role}</small>
             </div>
             <button
               className="icon-button"
@@ -359,10 +369,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             </div>
             <button
               className="profile-button"
-              aria-label="Profil Andini Putri"
+              aria-label={`Profil ${org}`}
               onClick={() => setModal("settings")}
             >
-              <Avatar initials="AP" color="sand" small />
+              <Avatar initials={initials} color="sand" small />
             </button>
           </div>
         </header>
@@ -381,7 +391,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               saring<span>.</span> <i />
               Lebih dekat dengan talenta yang tepat.
             </span>
-            <span>Prototipe desain · Data fiktif</span>
+            <span>AI membantu, HR yang memutuskan</span>
           </footer>
         </main>
       </div>
@@ -414,8 +424,8 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                 <div>
                   <dt>Akun</dt>
                   <dd>
-                    Andini Putri · HR Manager
-                    <small>{DEMO_EMAIL}</small>
+                    {org}
+                    <small>{role}</small>
                   </dd>
                 </div>
                 <div>
@@ -446,12 +456,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                 >
                   Tutup
                 </button>
-                <form action={logout} onSubmit={resetIntro}>
-                  <button className="button primary" type="submit">
-                    <LogOut size={15} />
-                    Keluar
-                  </button>
-                </form>
+                <button className="button primary" type="button" onClick={logout}>
+                  <LogOut size={15} />
+                  Keluar
+                </button>
               </div>
             </>
           )}

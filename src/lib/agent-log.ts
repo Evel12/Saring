@@ -1,10 +1,10 @@
-import type { AgentStep, Candidate } from "./demo";
+import type { AgentStep, Candidate } from "./candidates";
 
 export type LogEntry = {
   id: string;
   at: string;
   actor: "agent" | "hr";
-  candidateId: number;
+  candidateId: string;
   tool?: string;
   label: string;
   result: string;
@@ -22,7 +22,7 @@ export function buildLog(candidates: Candidate[], hrEvents: LogEntry[]) {
           new Date(
             Date.parse(candidate.appliedAt) + (index + 1) * 15_000,
           ).toISOString(),
-        actor: "agent",
+        actor: step.actor ?? "agent",
         candidateId: candidate.id,
         tool: step.tool,
         label: step.label,

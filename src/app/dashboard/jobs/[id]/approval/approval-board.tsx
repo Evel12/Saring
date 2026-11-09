@@ -13,8 +13,8 @@ import {
   Send,
   Users,
 } from "lucide-react";
-import type { Candidate } from "@/lib/demo";
-import { draftError, SCHEDULE_LINK_PLACEHOLDER } from "@/lib/invitation-demo";
+import type { Candidate } from "@/lib/candidates";
+import { draftError, mailtoFor, scheduleUrl, SCHEDULE_LINK_PLACEHOLDER } from "@/lib/invitation-demo";
 import { Avatar } from "../../../candidate-table";
 import { useDashboard } from "../../../dashboard-context";
 
@@ -57,8 +57,8 @@ export function ApprovalBoard({
   const waiting = candidates.filter(
     (c) => c.role === role && c.status === "Perlu ditinjau",
   ).length;
-  const [excluded, setExcluded] = useState<number[]>([]);
-  const [activeId, setActiveId] = useState<number | null>(null);
+  const [excluded, setExcluded] = useState<string[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [draftProblem, setDraftProblem] = useState("");
   const confirmDialog = useRef<HTMLDialogElement>(null);
@@ -75,7 +75,7 @@ export function ApprovalBoard({
   const draft = active ? getDraft(active, company) : null;
   const activeError = draft ? draftError(draft) : undefined;
 
-  function toggle(id: number) {
+  function toggle(id: string) {
     setExcluded((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
     );
@@ -176,7 +176,7 @@ export function ApprovalBoard({
                   ) : (
                     <span className="job-field-hint" id="draft-hint">
                       {SCHEDULE_LINK_PLACEHOLDER} diganti otomatis dengan link
-                      pribadi saat email dikirim.
+                      pribadi saat kamu membuka email.
                     </span>
                   )}
                 </div>
@@ -239,14 +239,13 @@ export function ApprovalBoard({
                       {status === "gagal" && (
                         <p className="approval-failed" role="alert">
                           <AlertTriangle size={12} />
-                          Email gagal terkirim. Centang lalu kirim lagi untuk
-                          mencoba ulang.
+                          Link gagal dibuat. Centang lalu coba lagi.
                         </p>
                       )}
                       {status === "mengirim" && (
                         <p className="approval-sending">
                           <LoaderCircle className="spin" size={12} />
-                          Mengirim...
+                          Membuat link...
                         </p>
                       )}
                     </li>
@@ -280,8 +279,8 @@ export function ApprovalBoard({
                   <Send size={15} />
                 )}
                 {sending
-                  ? "Mengirim undangan..."
-                  : `Setujui & kirim ${selected.length} undangan`}
+                  ? "Membuat link..."
+                  : `Setujui & buat ${selected.length} link jadwal`}
               </button>
             </section>
           </div>
@@ -290,7 +289,11 @@ export function ApprovalBoard({
 
       {invited.length > 0 && (
         <section className="panel job-panel approval-sent">
-          <h2>Undangan terkirim</h2>
+          <h2>Link jadwal siap</h2>
+          <p className="job-panel-intro">
+            Kirim link pribadi ini ke pelamar lewat emailmu. Pelamar memilih
+            sendiri slot interview yang masih kosong.
+          </p>
           <ul>
             {invited.map((candidate, index) => (
               <li
@@ -301,7 +304,19 @@ export function ApprovalBoard({
                 <Link href={`/dashboard/candidates/${candidate.id}`}>
                   {candidate.name}
                 </Link>
-                <span>Menunggu pelamar memilih jadwal</span>
+                <span>
+                  <a href={mailtoFor(candidate, getDraft(candidate, company))}>
+                    Buka di email
+                  </a>
+                  {" · "}
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => navigator.clipboard.writeText(scheduleUrl(candidate))}
+                  >
+                    Salin link
+                  </button>
+                </span>
               </li>
             ))}
           </ul>
@@ -315,9 +330,10 @@ export function ApprovalBoard({
         onCancel={() => setConfirming(false)}
       >
         <div className="modal-content">
-          <h2>Kirim {selected.length} undangan?</h2>
+          <h2>Setujui {selected.length} undangan?</h2>
           <p className="modal-intro">
-            Email langsung dikirim dan tidak bisa ditarik kembali.
+            Saring membuat link jadwal pribadi untuk tiap pelamar. Setelah itu
+            kamu mengirim emailnya dari aplikasi emailmu.
           </p>
           <ul>
             {selected.map((candidate) => (
@@ -340,7 +356,7 @@ export function ApprovalBoard({
               onClick={confirmSend}
             >
               <Send size={15} />
-              Kirim undangan
+              Setujui &amp; buat link
             </button>
           </div>
         </div>

@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { Printer } from "lucide-react";
-import type { SkillStatus } from "@/lib/demo";
+import type { SkillStatus } from "@/lib/candidates";
 import { Status } from "../../../candidate-table";
 import { SKILL_LABEL } from "../../../candidates/[id]/candidate-detail";
 import { useDashboard } from "../../../dashboard-context";
 import { PageHeading } from "../../../dashboard-ui";
 
-const SKILL_ORDER: SkillStatus[] = ["verified", "claimed", "contradicted"];
+const SKILL_ORDER: SkillStatus[] = ["verified", "claimed", "contradicted", "unknown"];
 
 export function JobReport({
   jobId,

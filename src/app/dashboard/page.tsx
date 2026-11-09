@@ -27,8 +27,8 @@ const REVIEW_HREF = "/dashboard/candidates?status=Perlu+ditinjau";
 const pad = (value: number) => value.toString().padStart(2, "0");
 
 export default function OverviewPage() {
-  const { openJobs, candidates, pending, hrEvents } = useDashboard();
-  const upcoming = upcomingInterviews();
+  const { openJobs, candidates, interviews, pending, hrEvents } = useDashboard();
+  const upcoming = upcomingInterviews(interviews);
   const recent = buildLog(candidates, hrEvents).slice(0, 4);
   const stats = [
     {

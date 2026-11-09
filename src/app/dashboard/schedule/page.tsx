@@ -7,7 +7,7 @@ import {
   formatDateTime,
   formatTimeRange,
 } from "@/lib/applicant-demo";
-import type { Interview } from "@/lib/demo";
+import type { Interview } from "@/lib/candidates";
 import { Avatar } from "../candidate-table";
 import { useDashboard } from "../dashboard-context";
 import { PageHeading, upcomingInterviews } from "../dashboard-ui";
@@ -15,9 +15,9 @@ import { PageHeading, upcomingInterviews } from "../dashboard-ui";
 const REMINDER_AFTER = 48 * 60 * 60 * 1000;
 
 export default function SchedulePage() {
-  const { candidates } = useDashboard();
+  const { candidates, interviews } = useDashboard();
   const days = new Map<string, Interview[]>();
-  for (const item of upcomingInterviews()) {
+  for (const item of upcomingInterviews(interviews)) {
     const day = formatDate(item.start);
     days.set(day, [...(days.get(day) ?? []), item]);
   }
@@ -82,8 +82,8 @@ export default function SchedulePage() {
             Menunggu pilih jadwal
           </h2>
           <p className="job-panel-intro">
-            Agent mengirim pengingat otomatis jika pelamar belum memilih jadwal
-            48 jam setelah undangan.
+            Pelamar sudah menerima link jadwal pribadi. Kirim ulang linknya
+            dari halaman persetujuan kalau mereka belum memilih.
           </p>
           {waiting.length ? (
             <ul className="schedule-waiting">

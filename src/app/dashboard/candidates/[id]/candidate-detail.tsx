@@ -22,12 +22,11 @@ import {
   formatTimeRange,
 } from "@/lib/applicant-demo";
 import {
-  interviews,
   SHORTLIST_RULE,
   type AgentStep,
   type Candidate,
   type SkillStatus,
-} from "@/lib/demo";
+} from "@/lib/candidates";
 import { Avatar, Status } from "../../candidate-table";
 import { useDashboard } from "../../dashboard-context";
 
@@ -35,6 +34,7 @@ export const SKILL_LABEL: Record<SkillStatus, string> = {
   verified: "Terbukti",
   claimed: "Hanya klaim",
   contradicted: "Bertentangan",
+  unknown: "Belum ada bukti",
 };
 
 const STEP_ICON: Record<AgentStep["state"], typeof Check> = {
@@ -67,8 +67,8 @@ function CvExcerpt({ text }: { text: string }) {
 }
 
 function DecisionPanel({ candidate }: { candidate: Candidate }) {
-  const { jobs, approve, decline, returnToReview } = useDashboard();
-  const job = jobs.find((item) => item.title === candidate.role);
+  const { jobs, interviews, approve, decline, returnToReview } = useDashboard();
+  const job = jobs.find((item) => item.id === candidate.jobId);
   const interview = interviews.find((item) => item.candidateId === candidate.id);
   return (
     <section className="panel job-panel review-decision">
@@ -170,12 +170,12 @@ function DecisionPanel({ candidate }: { candidate: Candidate }) {
   );
 }
 
-export function CandidateDetail({ id }: { id: number }) {
+export function CandidateDetail({ id }: { id: string }) {
   const { candidates } = useDashboard();
   const candidate = candidates.find((item) => item.id === id);
   if (!candidate) return null;
 
-  const counts = (["verified", "claimed", "contradicted"] as const).map(
+  const counts = (["verified", "claimed", "contradicted", "unknown"] as const).map(
     (status) => ({
       status,
       count: candidate.skills.filter((skill) => skill.status === status).length,
@@ -190,7 +190,8 @@ export function CandidateDetail({ id }: { id: number }) {
           <div>
             <h1>{candidate.name}</h1>
             <p>
-              {candidate.role} · {candidate.experience} pengalaman
+              {candidate.role}
+              {candidate.experience && ` · ${candidate.experience} pengalaman`}
             </p>
           </div>
         </div>
@@ -232,6 +233,18 @@ export function CandidateDetail({ id }: { id: number }) {
                 <small>/100</small>
               </strong>
             </div>
+            {candidate.strengths.length > 0 && (
+              <ul className="review-parts">
+                {candidate.strengths.map((text) => (
+                  <li key={text}>
+                    <p>
+                      <FileText size={12} />
+                      {text}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
             <ul className="review-parts">
               {candidate.scoreParts.map((part) => (
                 <li key={part.label}>
@@ -280,8 +293,8 @@ export function CandidateDetail({ id }: { id: number }) {
               ))}
             </ul>
             <p className="review-rule">
-              Hanya link dari pelamar yang diperiksa. Link mati atau kosong tidak
-              mengurangi skor.
+              “Belum ada bukti” bukan berarti tidak mampu. Agent tidak pernah
+              menolak otomatis.
             </p>
           </section>
 
@@ -306,12 +319,16 @@ export function CandidateDetail({ id }: { id: number }) {
               Blind screening
             </h2>
             <p className="job-panel-intro">
-              {candidate.hiddenFields.length
-                ? `Agent menyembunyikan ${candidate.hiddenFields.length} field sebelum menilai: ${candidate.hiddenFields.join(", ")}.`
-                : "Tidak ada data sensitif di CV ini, jadi tidak ada yang perlu disembunyikan."}
+              Agent hanya mengirim baris profesional ke model AI. Nama, kontak,
+              URL, dan data pribadi disaring dulu, jadi penilaian tidak melihat
+              siapa pelamarnya.
             </p>
             <h3>Cuplikan CV yang dinilai agent</h3>
-            <CvExcerpt text={candidate.cvExcerpt} />
+            {candidate.cvExcerpt ? (
+              <CvExcerpt text={candidate.cvExcerpt} />
+            ) : (
+              <p className="job-panel-intro">Belum ada bukti yang dibaca.</p>
+            )}
           </section>
         </div>
 

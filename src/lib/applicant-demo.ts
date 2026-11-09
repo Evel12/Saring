@@ -1,22 +1,7 @@
-// Data dan fungsi tiruan untuk halaman pelamar. Saat backend siap, cukup ganti
-// isi tiga fungsi async di bawah dengan panggilan API; bentuk datanya tetap.
-// Data lowongan ada di job-store.ts.
+// Data halaman pelamar (jadwal interview) dari backend + format tanggal WIB.
+// Lamaran publik dikirim langsung dari apply-form.tsx.
 
-export type ApplicationInput = {
-  name: string;
-  email: string;
-  cv: File;
-  link?: string;
-  consent: true;
-};
-
-export type InterviewSlot = {
-  id: string;
-  start: string;
-  end: string;
-  // Khusus demo: slot tampak kosong, lalu ditolak saat dipilih.
-  takenOnSubmit?: boolean;
-};
+export type InterviewSlot = { id: string; start: string; end: string };
 
 export type ScheduleInvite = {
   token: string;
@@ -26,102 +11,73 @@ export type ScheduleInvite = {
   company: string;
   format: string;
   durationMinutes: number;
-  expiresAt: string;
+  expiresAt: string | null;
   slots: InterviewSlot[];
+  bookedSlotId: string | null;
 };
 
 export type BookingResult =
   | { ok: true }
   | { ok: false; reason: "taken"; alternatives: InterviewSlot[] };
 
-export const COMPANY = "PT Karya Contoh";
+type ApiSlot = { id: string; starts_at: number; ends_at: number };
+const toSlot = (s: ApiSlot): InterviewSlot => ({
+  id: s.id,
+  start: new Date(s.starts_at * 1000).toISOString(),
+  end: new Date(s.ends_at * 1000).toISOString(),
+});
+/** token di URL = `${applicationId}.${scheduleToken}` */
+const path = (token: string) => decodeURIComponent(token).split(".").join("/");
 
-const slots: InterviewSlot[] = [
-  {
-    id: "s1",
-    start: "2026-11-12T09:00:00+07:00",
-    end: "2026-11-12T09:45:00+07:00",
-  },
-  {
-    id: "s2",
-    start: "2026-11-12T10:00:00+07:00",
-    end: "2026-11-12T10:45:00+07:00",
-    takenOnSubmit: true,
-  },
-  {
-    id: "s3",
-    start: "2026-11-12T14:00:00+07:00",
-    end: "2026-11-12T14:45:00+07:00",
-  },
-  {
-    id: "s4",
-    start: "2026-11-13T09:30:00+07:00",
-    end: "2026-11-13T10:15:00+07:00",
-  },
-  {
-    id: "s5",
-    start: "2026-11-13T13:00:00+07:00",
-    end: "2026-11-13T13:45:00+07:00",
-  },
-  {
-    id: "s6",
-    start: "2026-11-16T11:00:00+07:00",
-    end: "2026-11-16T11:45:00+07:00",
-  },
-];
-
-const baseInvite = {
-  applicantName: "Nadia Putri",
-  jobTitle: "Frontend Developer",
-  company: COMPANY,
-  format: "Interview teknis · Online",
-  durationMinutes: 45,
-  expiresAt: "2026-11-11T23:59:00+07:00",
-};
-
-const invites: ScheduleInvite[] = [
-  { ...baseInvite, token: "demo-aktif-8f3k", status: "active", slots },
-  { ...baseInvite, token: "demo-penuh-5h2w", status: "active", slots: [] },
-  { ...baseInvite, token: "demo-kedaluwarsa-7q1p", status: "expired", slots },
-  { ...baseInvite, token: "demo-terpakai-3t6n", status: "used", slots },
-];
-
-const wait = (ms: number) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
-
-export async function submitApplication(
-  _slug: string,
-  input: ApplicationInput,
-) {
-  await wait(900);
-  // Khusus demo: email ini memicu tampilan gagal kirim.
-  if (input.email.toLowerCase() === "gagal@contoh.test")
-    throw new Error("Gagal mengirim lamaran.");
-}
-
-export async function getScheduleInvite(token: string) {
-  return invites.find((invite) => invite.token === token) ?? null;
-}
-
-export async function bookSlot(
-  token: string,
-  slotId: string,
-): Promise<BookingResult> {
-  await wait(700);
-  const available =
-    invites.find((invite) => invite.token === token)?.slots ?? [];
-  const picked = available.find((slot) => slot.id === slotId);
-  if (!picked?.takenOnSubmit) return { ok: true };
-  const distance = (slot: InterviewSlot) =>
-    Math.abs(Date.parse(slot.start) - Date.parse(picked.start));
+// Dipanggil di server (halaman /schedule/[token]).
+export async function getScheduleInvite(token: string): Promise<ScheduleInvite | null> {
+  if (!decodeURIComponent(token).includes(".")) return null;
+  const api = process.env.API_URL ?? "http://127.0.0.1:8000";
+  const res = await fetch(`${api}/api/v1/schedule/${path(token)}`, { cache: "no-store" });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Backend ${res.status} on schedule view`);
+  const v: {
+    title: string;
+    company: string;
+    candidate_name: string;
+    slots: ApiSlot[];
+    booked: ApiSlot | null;
+  } = await res.json();
+  const slots = [...(v.booked ? [v.booked] : []), ...v.slots]
+    .map(toSlot)
+    .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+  const first = slots[0];
   return {
-    ok: false,
-    reason: "taken",
-    alternatives: available
-      .filter((slot) => !slot.takenOnSubmit)
-      .sort((a, b) => distance(a) - distance(b))
-      .slice(0, 2),
+    token,
+    status: "active",
+    applicantName: v.candidate_name,
+    jobTitle: v.title,
+    company: v.company,
+    format: "Interview · detail dikirim HR",
+    durationMinutes: first ? Math.round((Date.parse(first.end) - Date.parse(first.start)) / 60000) : 0,
+    expiresAt: null,
+    slots,
+    bookedSlotId: v.booked?.id ?? null,
   };
+}
+
+// Dipanggil di browser saat pelamar memilih slot.
+export async function bookSlot(token: string, slotId: string): Promise<BookingResult> {
+  const res = await fetch(`/api/v1/schedule/${path(token)}/book`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ slot_id: slotId }),
+  });
+  if (res.ok) return { ok: true };
+  if (res.status === 409) {
+    const data = await res.json().catch(() => ({}));
+    return {
+      ok: false,
+      reason: "taken",
+      alternatives: (data.detail?.alternatives ?? []).map(toSlot),
+    };
+  }
+  throw new Error("Jadwal belum tersimpan.");
 }
 
 // Selalu memakai WIB supaya hasil server dan browser sama.

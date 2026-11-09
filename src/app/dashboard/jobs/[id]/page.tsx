@@ -15,6 +15,7 @@ import { CandidateTable } from "../../candidate-table";
 import { PageHeading } from "../../dashboard-ui";
 import { ApprovalEntry } from "./approval-entry";
 import { CopyLink } from "./copy-link";
+import { RunAnalysis } from "./run-analysis";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -50,7 +51,9 @@ export default async function JobDetailPage({ params, searchParams }: Props) {
     <>
       <PageHeading
         title={job.title}
-        description={`${job.company} · ${job.department} · ${job.type} · ${job.location}`}
+        description={[job.company, job.department, job.type, job.location]
+          .filter(Boolean)
+          .join(" · ")}
       >
         <span
           className={`job-open ${job.status === "closed" ? "job-closed" : ""}`}
@@ -58,6 +61,7 @@ export default async function JobDetailPage({ params, searchParams }: Props) {
           <i />
           {job.status === "open" ? "Aktif" : "Ditutup"}
         </span>
+        <RunAnalysis jobId={job.id} />
         <Link className="button secondary" href={`/dashboard/jobs/${job.id}/report`}>
           <ChartColumn size={15} />
           Laporan
@@ -78,7 +82,7 @@ export default async function JobDetailPage({ params, searchParams }: Props) {
 
       <div className="dashboard-grid">
         <div className="main-column">
-          {job.status === "open" ? (
+          {job.status === "open" && job.slug ? (
             <section className="panel job-panel job-share">
               <div className="job-share-heading">
                 <span className="job-icon sage">

@@ -11,7 +11,7 @@ import {
   Video,
 } from "lucide-react";
 import { formatDayMonth, formatTime } from "@/lib/applicant-demo";
-import { interviews } from "@/lib/demo";
+import type { Interview } from "@/lib/candidates";
 import { useDashboard } from "./dashboard-context";
 
 export function PageHeading({
@@ -104,13 +104,13 @@ export function JobCards({ full = false }: { full?: boolean }) {
   );
 }
 
-export function upcomingInterviews() {
+export function upcomingInterviews(interviews: Interview[]) {
   return [...interviews].sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
 }
 
 export function SchedulePanel() {
-  const { candidates } = useDashboard();
-  const list = upcomingInterviews();
+  const { candidates, interviews } = useDashboard();
+  const list = upcomingInterviews(interviews);
   return (
     <section className="panel schedule-panel">
       <div className="section-heading">

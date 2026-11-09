@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Check } from "lucide-react";
-import { getJobBySlug } from "@/lib/job-store";
+import { getApplyJob } from "@/lib/public-apply";
 import { NextSteps, PublicMessage } from "../../../public-ui";
 
 export const metadata: Metadata = {
@@ -15,7 +15,7 @@ export default async function ApplySuccessPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const job = await getJobBySlug(slug);
+  const job = await getApplyJob(slug);
   if (!job) notFound();
 
   return (

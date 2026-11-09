@@ -73,6 +73,9 @@ class Vacancy(Tenant, Base):
     apply_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
     intro_questions: Mapped[list | None] = mapped_column(JSON, nullable=True)
     deleted_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    department: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    employment_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    location: Mapped[str | None] = mapped_column(String(80), nullable=True)
 
 
 class RequirementVersion(Tenant, Base):
@@ -137,6 +140,24 @@ class Application(Tenant, Base):
     # workspace reads these through the application intro API. JSON to stay
     # schema-light as question sets evolve.
     intro_answers: Mapped[dict] = mapped_column(JSON, default=dict)
+    schedule_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+class InterviewSlot(Tenant, Base):
+    """HR-defined interview time for a vacancy; one shortlisted applicant books it."""
+
+    __tablename__ = "interview_slots"
+    __table_args__ = scoped(
+        ref("vacancy_id", "vacancies"),
+        ref("application_id", "applications"),
+        UniqueConstraint("application_id"),
+        CheckConstraint("ends_at > starts_at"),
+    )
+    vacancy_id: Mapped[str] = mapped_column(String(36), index=True)
+    starts_at: Mapped[float] = mapped_column(Float)
+    ends_at: Mapped[float] = mapped_column(Float)
+    application_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    booked_at: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class Document(Tenant, Base):

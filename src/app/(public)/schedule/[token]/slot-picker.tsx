@@ -186,9 +186,11 @@ export function SlotPicker({
               </>
             )}
           </button>
-          <p className="public-summary-note">
-            Link ini berlaku sampai {formatDate(invite.expiresAt)}.
-          </p>
+          {invite.expiresAt && (
+            <p className="public-summary-note">
+              Link ini berlaku sampai {formatDate(invite.expiresAt)}.
+            </p>
+          )}
         </section>
       </aside>
     </form>

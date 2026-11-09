@@ -1,14 +1,11 @@
 "use client";
 
-import { createContext, useCallback, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
+import { useRouter } from "next/navigation";
 import type { LogEntry } from "@/lib/agent-log";
-import {
-  initialCandidates,
-  initialHrEvents,
-  type AgentStep,
-  type Candidate,
-} from "@/lib/demo";
+import { request } from "@/lib/api";
+import type { Candidate, Interview } from "@/lib/candidates";
 import {
   createDraft,
   sendInvitation,
@@ -23,6 +20,7 @@ type DashboardState = {
   jobs: Job[];
   openJobs: Job[];
   candidates: Candidate[];
+  interviews: Interview[];
   pending: number;
   failedInvitations: number;
   hrEvents: LogEntry[];
@@ -35,8 +33,8 @@ type DashboardState = {
   decline: (candidate: Candidate) => void;
   returnToReview: (candidate: Candidate) => void;
   getDraft: (candidate: Candidate, company: string) => InvitationDraft;
-  saveDraft: (id: number, draft: InvitationDraft) => void;
-  invitations: Record<number, InvitationStatus>;
+  saveDraft: (id: string, draft: InvitationDraft) => void;
+  invitations: Record<string, InvitationStatus>;
   sendInvitations: (list: Candidate[], company: string) => Promise<void>;
 };
 
@@ -50,12 +48,19 @@ export function useDashboard() {
 
 export function DashboardProvider({
   jobs,
+  candidates: loaded,
+  interviews,
   children,
 }: {
   jobs: Job[];
+  candidates: Candidate[];
+  interviews: Interview[];
   children: ReactNode;
 }) {
-  const [candidates, setCandidates] = useState(initialCandidates);
+  const router = useRouter();
+  // Optimistic copy of server data; replaced whenever the server re-renders.
+  const [candidates, setCandidates] = useState(loaded);
+  useEffect(() => setCandidates(loaded), [loaded]);
   const [modal, setModal] = useState<Modal>(null);
   const [toast, setToastMessage] = useState("");
   const [toastFailed, setToastFailed] = useState(false);
@@ -63,134 +68,55 @@ export function DashboardProvider({
     setToastFailed(false);
     setToastMessage(message);
   }, []);
-  const [drafts, setDrafts] = useState<Record<number, InvitationDraft>>({});
-  const [invitations, setInvitations] = useState<
-    Record<number, InvitationStatus>
-  >({});
-  const [hrEvents, setHrEvents] = useState<LogEntry[]>(initialHrEvents);
+  const [drafts, setDrafts] = useState<Record<string, InvitationDraft>>({});
+  const [invitations, setInvitations] = useState<Record<string, InvitationStatus>>({});
 
-  function update(id: number, change: (candidate: Candidate) => Candidate) {
+  async function decide(
+    candidate: Candidate,
+    decision: "shortlist" | "reject" | "undecided",
+    status: Candidate["status"],
+    message: string,
+  ) {
+    const previous = candidates;
     setCandidates((prev) =>
-      prev.map((item) => (item.id === id ? change(item) : item)),
+      prev.map((item) => (item.id === candidate.id ? { ...item, status } : item)),
     );
-  }
-  function setStatus(id: number, status: Candidate["status"]) {
-    update(id, (item) => ({ ...item, status }));
-  }
-  function logHr(candidate: Candidate, label: string, result: string) {
-    setHrEvents((prev) => [
-      {
-        id: `hr-${Date.now()}-${candidate.id}`,
-        at: new Date().toISOString(),
-        actor: "hr",
-        candidateId: candidate.id,
-        label,
-        result,
-        state: "ok",
-      },
-      ...prev,
-    ]);
-  }
-  function addStep(id: number, step: AgentStep) {
-    update(id, (item) => ({ ...item, pipeline: [...item.pipeline, step] }));
+    try {
+      await request(`/applications/${candidate.id}/decisions`, {
+        method: "POST",
+        body: { decision, rationale: message },
+      });
+      setToast(message);
+      router.refresh();
+    } catch (err) {
+      setCandidates(previous);
+      setToastFailed(true);
+      setToastMessage(`Gagal menyimpan keputusan: ${(err as Error).message}`);
+    }
   }
 
-  function approve(candidate: Candidate) {
-    setStatus(candidate.id, "Shortlist");
-    setToast(`${candidate.name} ditambahkan ke shortlist.`);
-    logHr(
-      candidate,
-      "Menyetujui shortlist",
-      `HR menyetujui ${candidate.name} untuk shortlist ${candidate.role}.`,
-    );
-  }
-  function decline(candidate: Candidate) {
-    setStatus(candidate.id, "Tidak dilanjutkan");
-    setToast(`${candidate.name} tidak dilanjutkan. Tidak ada email terkirim.`);
-    logHr(
-      candidate,
-      "Tidak melanjutkan",
-      `HR tidak melanjutkan ${candidate.name}. Tidak ada email terkirim.`,
-    );
-  }
-  function returnToReview(candidate: Candidate) {
-    setStatus(candidate.id, "Perlu ditinjau");
-    setToast(`${candidate.name} dikembalikan ke tinjauan.`);
-    logHr(
-      candidate,
-      "Mengembalikan ke tinjauan",
-      `HR mengembalikan ${candidate.name} ke tinjauan.`,
-    );
-  }
-  function getDraft(candidate: Candidate, company: string) {
-    return drafts[candidate.id] ?? createDraft(candidate, company);
-  }
   async function sendInvitations(list: Candidate[], company: string) {
-    const previous = invitations;
     setInvitations((prev) => ({
       ...prev,
       ...Object.fromEntries(list.map((c) => [c.id, "mengirim" as const])),
     }));
-    for (const candidate of list)
-      logHr(
-        candidate,
-        "Menyetujui undangan",
-        `HR menyetujui undangan interview untuk ${candidate.name}.`,
-      );
     const results = await Promise.all(
-      list.map(async (candidate) => {
-        const isRetry = previous[candidate.id] === "gagal";
-        const sent = await sendInvitation(
-          candidate,
-          getDraft(candidate, company),
-          isRetry,
-        );
-        return { candidate, sent, isRetry };
-      }),
+      list.map(async (candidate) => ({ candidate, sent: await sendInvitation(candidate) })),
     );
     setInvitations((prev) => ({
       ...prev,
       ...Object.fromEntries(
-        results.map(({ candidate, sent }) => [
-          candidate.id,
-          sent ? ("terkirim" as const) : ("gagal" as const),
-        ]),
+        results.map(({ candidate, sent }) => [candidate.id, sent ? ("terkirim" as const) : ("gagal" as const)]),
       ),
     }));
-    const at = new Date().toISOString();
-    for (const { candidate, sent, isRetry } of results) {
-      if (sent) {
-        update(candidate.id, (item) => ({
-          ...item,
-          status: "Diundang",
-          invitedAt: at,
-        }));
-        addStep(candidate.id, {
-          tool: "send_email",
-          label: "Mengirim undangan",
-          result: isRetry
-            ? "Undangan terkirim pada percobaan ulang."
-            : "Undangan terkirim setelah disetujui HR.",
-          state: isRetry ? "recovered" : "ok",
-          at,
-        });
-      } else {
-        addStep(candidate.id, {
-          tool: "send_email",
-          label: "Mengirim undangan",
-          result: "Email gagal terkirim setelah dicoba ulang. HR diberi tahu.",
-          state: "flagged",
-          at,
-        });
-      }
-    }
     const failed = results.filter((item) => !item.sent).length;
-    setToast(
-      failed
-        ? `${failed} dari ${results.length} undangan gagal terkirim.`
-        : `${results.length} undangan terkirim.`,
-    );
     setToastFailed(failed > 0);
+    setToastMessage(
+      failed
+        ? `${failed} dari ${results.length} link jadwal gagal dibuat.`
+        : `${results.length} link jadwal dibuat untuk ${company}. Kirim lewat emailmu.`,
+    );
+    router.refresh();
   }
 
   return (
@@ -199,22 +125,25 @@ export function DashboardProvider({
         jobs,
         openJobs: jobs.filter((job) => job.status === "open"),
         candidates,
+        interviews,
         pending: candidates.filter((c) => c.status === "Perlu ditinjau").length,
         failedInvitations: candidates.filter(
           (c) => c.status === "Shortlist" && invitations[c.id] === "gagal",
         ).length,
-        hrEvents,
+        hrEvents: [], // HR actions come back from the backend inside each candidate's pipeline
         modal,
         setModal,
         toast,
         toastFailed,
         setToast,
-        approve,
-        decline,
-        returnToReview,
-        getDraft,
-        saveDraft: (id, draft) =>
-          setDrafts((prev) => ({ ...prev, [id]: draft })),
+        approve: (c) =>
+          decide(c, "shortlist", "Shortlist", `HR menyetujui ${c.name} ke shortlist ${c.role}.`),
+        decline: (c) =>
+          decide(c, "reject", "Tidak dilanjutkan", `${c.name} tidak dilanjutkan. Tidak ada email terkirim.`),
+        returnToReview: (c) =>
+          decide(c, "undecided", "Perlu ditinjau", `${c.name} dikembalikan ke tinjauan.`),
+        getDraft: (candidate, company) => drafts[candidate.id] ?? createDraft(candidate, company),
+        saveDraft: (id, draft) => setDrafts((prev) => ({ ...prev, [id]: draft })),
         invitations,
         sendInvitations,
       }}

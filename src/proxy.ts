@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { SESSION_COOKIE } from "@/lib/demo-auth";
+import { SESSION_COOKIE } from "@/lib/session";
 
 // Pemeriksaan ringan: halaman HRD hanya untuk yang sudah login.
 export function proxy(request: NextRequest) {

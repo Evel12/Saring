@@ -12,11 +12,11 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { submitApplication } from "@/lib/applicant-demo";
+import { splitSlug } from "@/lib/public-apply";
 
-const MAX_CV_SIZE = 10 * 1024 * 1024;
+const MAX_CV_SIZE = 5 * 1024 * 1024; // batas backend
 
-type Field = "name" | "email" | "cv" | "link" | "consent";
+type Field = "name" | "email" | "cv" | "link" | "answer" | "consent";
 type Errors = Partial<Record<Field, string>>;
 
 function validateName(value: string) {
@@ -32,7 +32,7 @@ function validateCv(file: File | null) {
   if (!file) return "Unggah CV dalam format PDF atau DOCX.";
   if (!/\.(pdf|docx)$/i.test(file.name))
     return "CV harus berformat PDF atau DOCX.";
-  if (file.size > MAX_CV_SIZE) return "Ukuran CV maksimal 10 MB.";
+  if (file.size > MAX_CV_SIZE) return "Ukuran CV maksimal 5 MB.";
   if (file.size === 0) return "File ini kosong. Pilih file CV lain.";
 }
 function normalizeLink(value: string) {
@@ -66,22 +66,56 @@ function FieldError({ id, message }: { id: string; message?: string }) {
   );
 }
 
-export function ApplyForm({ slug }: { slug: string }) {
+function validateAnswer(value: string) {
+  return value.trim() ? undefined : "Jawab pertanyaan ini dulu.";
+}
+
+async function submitApplication(
+  slug: string,
+  input: { name: string; email: string; cv: File; answers: Record<string, string> },
+) {
+  const parts = splitSlug(slug);
+  if (!parts) throw new Error("Link lamaran tidak valid.");
+  const body = new FormData();
+  body.set("display_name", input.name);
+  body.set("email", input.email);
+  body.set("answers", JSON.stringify(input.answers));
+  body.append("files", input.cv);
+  const res = await fetch(`/api/v1/apply/${parts.id}/${parts.token}/submit`, {
+    method: "POST",
+    body,
+  });
+  if (res.ok) return;
+  const data = await res.json().catch(() => ({}));
+  throw new Error(
+    res.status === 429
+      ? "Terlalu banyak lamaran dari link ini. Coba lagi nanti."
+      : res.status === 404
+        ? "Lowongan ini sudah ditutup."
+        : typeof data.detail === "string"
+          ? data.detail
+          : "Periksa koneksi internet, lalu coba kirim lagi.",
+  );
+}
+
+export function ApplyForm({ slug, questions }: { slug: string; questions: string[] }) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [cv, setCv] = useState<File | null>(null);
   const [link, setLink] = useState("");
   const [consent, setConsent] = useState(false);
+  const [answers, setAnswers] = useState<string[]>(() => questions.map(() => ""));
   const [errors, setErrors] = useState<Errors>({});
   const [dragging, setDragging] = useState(false);
   const [sending, setSending] = useState(false);
-  const [sendFailed, setSendFailed] = useState(false);
+  const [sendFailed, setSendFailed] = useState("");
   const nameInput = useRef<HTMLInputElement>(null);
   const emailInput = useRef<HTMLInputElement>(null);
   const cvInput = useRef<HTMLInputElement>(null);
   const linkInput = useRef<HTMLInputElement>(null);
   const consentInput = useRef<HTMLInputElement>(null);
+  const answerInput = useRef<HTMLTextAreaElement>(null);
 
   function setError(field: Field, message?: string) {
     setErrors((prev) => ({ ...prev, [field]: message }));
@@ -115,29 +149,34 @@ export function ApplyForm({ slug }: { slug: string }) {
       email: validateEmail(email),
       cv: validateCv(cv),
       link: validateLink(link),
+      answer: questions.length ? validateAnswer(answers[0]) : undefined,
       consent: validateConsent(consent),
     };
     setErrors(next);
-    setSendFailed(false);
+    setSendFailed("");
     if (next.name) return nameInput.current?.focus();
     if (next.email) return emailInput.current?.focus();
     if (next.cv) return cvInput.current?.focus();
     if (next.link) return linkInput.current?.focus();
+    if (next.answer) return answerInput.current?.focus();
     if (next.consent) return consentInput.current?.focus();
     if (!cv) return;
     setSending(true);
     try {
+      const filled = Object.fromEntries(
+        questions.map((q, i) => [q.slice(0, 80), answers[i].trim()]),
+      );
+      if (link.trim()) filled["Link GitHub atau portofolio"] = normalizeLink(link);
       await submitApplication(slug, {
         name: name.trim(),
         email: email.trim(),
         cv,
-        link: link.trim() ? normalizeLink(link) : undefined,
-        consent: true,
+        answers: filled,
       });
       router.push(`/apply/${slug}/success`);
-    } catch {
+    } catch (err) {
       setSending(false);
-      setSendFailed(true);
+      setSendFailed((err as Error).message);
     }
   }
 
@@ -218,12 +257,12 @@ export function ApplyForm({ slug }: { slug: string }) {
           >
             <Upload size={24} />
             <strong>Klik atau letakkan CV di sini</strong>
-            <span>PDF atau DOCX · maksimal 10 MB</span>
+            <span>PDF atau DOCX · maksimal 5 MB</span>
             <input
               ref={cvInput}
               type="file"
               accept=".pdf,.docx"
-              aria-label="Unggah CV, PDF atau DOCX, maksimal 10 MB"
+              aria-label="Unggah CV, PDF atau DOCX, maksimal 5 MB"
               aria-invalid={!!errors.cv}
               aria-describedby={errors.cv ? "apply-cv-error" : undefined}
               onChange={(e) => {
@@ -262,10 +301,32 @@ export function ApplyForm({ slug }: { slug: string }) {
         />
         <FieldError id="apply-link-error" message={errors.link} />
         <span className="public-field-hint" id="apply-link-hint">
-          Dipakai untuk membuktikan skill di CV. Tanpa link, atau kalau link
-          bermasalah, nilaimu tidak berkurang.
+          Dilihat oleh HR. Tanpa link, nilaimu tidak berkurang.
         </span>
       </div>
+
+      {questions.map((question, i) => (
+        <div className="public-field" key={question}>
+          <label htmlFor={`apply-answer-${i}`}>
+            {question} {i > 0 && <em>opsional</em>}
+          </label>
+          <textarea
+            ref={i === 0 ? answerInput : undefined}
+            id={`apply-answer-${i}`}
+            rows={3}
+            maxLength={2000}
+            value={answers[i]}
+            aria-invalid={i === 0 && !!errors.answer}
+            aria-describedby={i === 0 && errors.answer ? "apply-answer-error" : undefined}
+            onChange={(e) => {
+              const value = e.target.value;
+              setAnswers((prev) => prev.map((x, j) => (j === i ? value : x)));
+              if (i === 0 && errors.answer) setError("answer", validateAnswer(value));
+            }}
+          />
+          {i === 0 && <FieldError id="apply-answer-error" message={errors.answer} />}
+        </div>
+      ))}
 
       <div className="public-field">
         <label className={`public-consent ${errors.consent ? "invalid" : ""}`}>
@@ -282,8 +343,8 @@ export function ApplyForm({ slug }: { slug: string }) {
             }}
           />
           <span>
-            Saya setuju Saring memproses CV saya dan memeriksa link yang saya
-            berikan untuk lamaran ini. Baca{" "}
+            Saya setuju Saring memproses CV dan jawaban saya untuk lamaran
+            ini. Baca{" "}
             <Link href="/privacy" target="_blank">
               kebijakan privasi
             </Link>
@@ -298,7 +359,7 @@ export function ApplyForm({ slug }: { slug: string }) {
           <TriangleAlert size={16} />
           <span>
             <strong>Lamaran belum terkirim.</strong> Isian dan CV-mu masih ada
-            di sini. Periksa koneksi internet, lalu coba kirim lagi.
+            di sini. {sendFailed}
           </span>
         </div>
       )}

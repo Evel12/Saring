@@ -4,13 +4,11 @@ import { useRef, useState } from "react";
 import type { FormEvent } from "react";
 import {
   ArrowRight,
-  Info,
   LoaderCircle,
   LockKeyhole,
   TriangleAlert,
 } from "lucide-react";
-import { DEMO_EMAIL, DEMO_PASSWORD } from "@/lib/demo-auth";
-import { login } from "./actions";
+import { ApiError, post } from "@/lib/api";
 
 export function LoginForm({ next }: { next: string }) {
   const [email, setEmail] = useState("");
@@ -30,16 +28,20 @@ export function LoginForm({ next }: { next: string }) {
     setSending(true);
     setError("");
     try {
-      const result = await login({ email, password, next });
-      if (result?.error) {
-        setError(result.error);
-        setSending(false);
-      }
+      await post("/auth/login", { email: email.trim(), password });
+      // Full navigation so the server layout sees the new session cookie.
+      window.location.assign(next);
     } catch (err) {
-      // redirect() dari server action dilempar sebagai error khusus Next.
-      if ((err as { digest?: string })?.digest?.startsWith("NEXT_REDIRECT"))
-        throw err;
-      setError("Tidak bisa masuk sekarang. Coba lagi sebentar lagi.");
+      const status = err instanceof ApiError ? err.status : 0;
+      setError(
+        status === 401
+          ? "Email atau kata sandi salah."
+          : status === 429
+            ? "Terlalu banyak percobaan. Tunggu sebentar lalu coba lagi."
+            : status === 0 || status >= 500
+              ? "Server Saring tidak terhubung. Pastikan start-api.cmd berjalan."
+              : "Tidak bisa masuk sekarang. Coba lagi sebentar lagi.",
+      );
       setSending(false);
     }
   }
@@ -103,14 +105,6 @@ export function LoginForm({ next }: { next: string }) {
           )}
         </button>
       </form>
-      <div className="notice login-demo">
-        <Info size={15} />
-        <span>
-          Akun demo: <strong>{DEMO_EMAIL}</strong> dengan kata sandi{" "}
-          <strong>{DEMO_PASSWORD}</strong>. Login ini masih tiruan untuk
-          prototipe.
-        </span>
-      </div>
     </section>
   );
 }

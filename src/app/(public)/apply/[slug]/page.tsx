@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { BriefcaseBusiness, CalendarX2, ShieldCheck } from "lucide-react";
-import { getJobBySlug } from "@/lib/job-store";
-import { NextSteps, PublicMessage } from "../../public-ui";
+import { BriefcaseBusiness, ShieldCheck } from "lucide-react";
+import { getApplyJob } from "@/lib/public-apply";
+import { NextSteps } from "../../public-ui";
 import { ApplyForm } from "./apply-form";
 
 type Props = { params: Promise<{ slug: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const job = await getJobBySlug(slug);
+  const job = await getApplyJob(slug);
   return {
     title: job
       ? `Lamar ${job.title} — ${job.company}`
@@ -19,22 +19,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ApplyPage({ params }: Props) {
   const { slug } = await params;
-  const job = await getJobBySlug(slug);
+  const job = await getApplyJob(slug);
   if (!job) notFound();
-
-  if (job.status === "closed")
-    return (
-      <PublicMessage
-        icon={<CalendarX2 size={22} />}
-        tone="sand"
-        title="Lowongan ini sudah ditutup"
-      >
-        <p>
-          {job.company} tidak lagi menerima lamaran untuk posisi {job.title}.
-          Lamaran yang sudah masuk tetap diproses.
-        </p>
-      </PublicMessage>
-    );
 
   return (
     <>
@@ -42,12 +28,14 @@ export default async function ApplyPage({ params }: Props) {
         <div>
           <h1>Lamar posisi {job.title}</h1>
           <p>
-            {job.company} · {job.department} · {job.type} · {job.location}
+            {[job.company, job.department, job.type, job.location]
+              .filter(Boolean)
+              .join(" · ")}
           </p>
         </div>
       </div>
       <div className="public-grid">
-        <ApplyForm slug={job.slug} />
+        <ApplyForm slug={job.slug} questions={job.questions} />
         <aside className="public-aside">
           <section className="panel public-card">
             <span className="job-icon sage">
