@@ -1,23 +1,37 @@
+# Node / Next.js
 node_modules/
+.next/
+out/
 dist/
+*.tsbuildinfo
+tmp/
+
+# Python
 .venv/
 __pycache__/
 .pytest_cache/
-*.db
+.coverage
+htmlcov/
+
+# Secrets and local config
 .env
 .env.*
 !.env.example
 env.cmd
-*.sqlite
-*.sqlite3
-*.db-*
-*.log
 *.pem
 *.key
-docs/CODEBASE_GUIDE.md
-.coverage
-htmlcov/
+
+# Local data
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.log
 storage/
+.runtime/
+
+# Test output
 test-results/
 playwright-report/
-.runtime/
+
+docs/CODEBASE_GUIDE.md

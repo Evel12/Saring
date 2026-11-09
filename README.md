@@ -1,6 +1,6 @@
 # Saring
 
-An evidence-first recruitment workspace with a real organization-scoped backend. React/TypeScript + Vite, FastAPI, SQLAlchemy/Alembic, SQLite or PostgreSQL, and a separate durable Python worker. Docker is **optional**.
+An evidence-first recruitment workspace with a real organization-scoped backend. Next.js (React/TypeScript), FastAPI, SQLAlchemy/Alembic, SQLite or PostgreSQL, and a separate durable Python worker. Docker is **optional**.
 
 Saring has no demo mode of any kind. Every deployment runs live: AI analysis, AI criteria suggestions, candidate email and Google Calendar coordination all require real server-side credentials and fail truthfully when they are missing. Nothing in the code fabricates applicants, model output, provider acceptance or delivery.
 
@@ -31,7 +31,7 @@ cd /d E:\Saring
 start-web.cmd
 ```
 
-Open **http://127.0.0.1:5173** (development web) or build `dist/` and serve it for real use. Interactive API documentation is at **http://127.0.0.1:8000/docs**.
+Open **http://127.0.0.1:5173** (Next.js dev server, kept on the backend's default origin port; `/api/*` is proxied to the API on port 8000 by `next.config.ts`). Interactive API documentation is at **http://127.0.0.1:8000/docs**.
 
 `setup.cmd` creates the virtual environment, installs locked dependencies, installs frontend dependencies, and runs migrations. `start-api.cmd` applies migrations before launching. The scripts run console processes in their current CMD window; they do not require background services or administrator privileges. Stop them with Ctrl+C.
 
@@ -78,9 +78,11 @@ Enter a password of at least 12 characters at the hidden prompt. Passwords are h
 
 ## Frontend workspace
 
+> **Migration in progress:** the frontend is moving from the original Vite app to the Next.js design in `src/app/`. Pages are being rewired to the v1 API one flow at a time (login → vacancies → public apply → candidates/review → schedule). Screens not yet rewired still run on demo data from `src/lib/demo*.ts`. The original Vite screens remain in git history; its typed API client, types, hooks and loaders now live in `src/lib/api.ts`, `types.ts`, `hooks.ts` and `data.ts`. The section below describes the original Vite workspace's behaviour, which the Next.js pages must keep.
+
 The frontend uses the v1 contracts directly, with cookie/CSRF authentication and cursor-based polling of persisted events.
 
-IBM Plex Sans and JetBrains Mono are bundled locally, with OFL notices in `public/licenses/`; no Google Fonts request is needed by the dashboard or candidate portal. Model configuration is read from the API/worker server environment; Settings shows its actual configured/unconfigured health rather than offering an ineffective browser override.
+The Next.js design currently loads Inter from Google Fonts (with a local fallback); the original Vite app bundled IBM Plex Sans and JetBrains Mono locally (OFL notices remain in `public/licenses/`). Model configuration is read from the API/worker server environment; Settings shows its actual configured/unconfigured health rather than offering an ineffective browser override.
 
 The workspace includes:
 
@@ -184,7 +186,7 @@ copy .env.example .env
 docker compose up --build
 ```
 
-Open **http://localhost:8080**. Compose explicitly overrides the SQLite default with its PostgreSQL connection, runs migrations first, and mounts the private file volume. Only the web port is exposed on loopback. The supplied PostgreSQL password is for local development; replace it for any shared deployment. Docker is not installed in the original development environment, so Compose/PostgreSQL execution is unverified; direct CMD/SQLite API, worker, migrations and browser flow were exercised.
+Open **http://localhost:8080**. Note: `Dockerfile.web` and `nginx.conf` still build the old Vite frontend and must be updated for Next.js before Compose works again. Compose explicitly overrides the SQLite default with its PostgreSQL connection, runs migrations first, and mounts the private file volume. Only the web port is exposed on loopback. The supplied PostgreSQL password is for local development; replace it for any shared deployment. Docker is not installed in the original development environment, so Compose/PostgreSQL execution is unverified; direct CMD/SQLite API, worker, migrations and browser flow were exercised.
 
 ## API
 
