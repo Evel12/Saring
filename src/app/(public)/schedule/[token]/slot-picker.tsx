@@ -17,7 +17,7 @@ import {
   formatTimeRange,
   type InterviewSlot,
   type ScheduleInvite,
-} from "@/lib/applicant-demo";
+} from "@/lib/schedule";
 
 type Conflict = { taken: InterviewSlot; alternatives: InterviewSlot[] };
 

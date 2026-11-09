@@ -14,7 +14,12 @@ import {
   Users,
 } from "lucide-react";
 import type { Candidate } from "@/lib/candidates";
-import { draftError, mailtoFor, scheduleUrl, SCHEDULE_LINK_PLACEHOLDER } from "@/lib/invitation-demo";
+import {
+  draftError,
+  mailtoFor,
+  scheduleUrl,
+  SCHEDULE_LINK_PLACEHOLDER,
+} from "@/lib/invitation";
 import { Avatar } from "../../../candidate-table";
 import { useDashboard } from "../../../dashboard-context";
 
@@ -41,13 +46,8 @@ export function ApprovalBoard({
   company: string;
   emptySlots: number;
 }) {
-  const {
-    candidates,
-    getDraft,
-    saveDraft,
-    invitations,
-    sendInvitations,
-  } = useDashboard();
+  const { candidates, getDraft, saveDraft, invitations, sendInvitations } =
+    useDashboard();
   const shortlist = candidates.filter(
     (c) => c.role === role && c.status === "Shortlist",
   );
@@ -312,7 +312,9 @@ export function ApprovalBoard({
                   <button
                     type="button"
                     className="text-button"
-                    onClick={() => navigator.clipboard.writeText(scheduleUrl(candidate))}
+                    onClick={() =>
+                      navigator.clipboard.writeText(scheduleUrl(candidate))
+                    }
                   >
                     Salin link
                   </button>

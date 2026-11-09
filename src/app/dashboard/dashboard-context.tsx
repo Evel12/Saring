@@ -1,6 +1,12 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { useRouter } from "next/navigation";
 import type { LogEntry } from "@/lib/agent-log";
@@ -10,7 +16,7 @@ import {
   createDraft,
   sendInvitation,
   type InvitationDraft,
-} from "@/lib/invitation-demo";
+} from "@/lib/invitation";
 import type { Job } from "@/lib/job-store";
 
 export type Modal = "settings" | "help" | null;
@@ -61,6 +67,13 @@ export function DashboardProvider({
   // Optimistic copy of server data; replaced whenever the server re-renders.
   const [candidates, setCandidates] = useState(loaded);
   useEffect(() => setCandidates(loaded), [loaded]);
+  // While the agent is still analysing someone, pull fresh results every 10 s.
+  const analysing = jobs.some((j) => j.analysisRunning);
+  useEffect(() => {
+    if (!analysing) return;
+    const timer = setInterval(() => router.refresh(), 10_000);
+    return () => clearInterval(timer);
+  }, [analysing, router]);
   const [modal, setModal] = useState<Modal>(null);
   const [toast, setToastMessage] = useState("");
   const [toastFailed, setToastFailed] = useState(false);
@@ -69,7 +82,9 @@ export function DashboardProvider({
     setToastMessage(message);
   }, []);
   const [drafts, setDrafts] = useState<Record<string, InvitationDraft>>({});
-  const [invitations, setInvitations] = useState<Record<string, InvitationStatus>>({});
+  const [invitations, setInvitations] = useState<
+    Record<string, InvitationStatus>
+  >({});
 
   async function decide(
     candidate: Candidate,
@@ -79,7 +94,9 @@ export function DashboardProvider({
   ) {
     const previous = candidates;
     setCandidates((prev) =>
-      prev.map((item) => (item.id === candidate.id ? { ...item, status } : item)),
+      prev.map((item) =>
+        item.id === candidate.id ? { ...item, status } : item,
+      ),
     );
     try {
       await request(`/applications/${candidate.id}/decisions`, {
@@ -101,12 +118,18 @@ export function DashboardProvider({
       ...Object.fromEntries(list.map((c) => [c.id, "mengirim" as const])),
     }));
     const results = await Promise.all(
-      list.map(async (candidate) => ({ candidate, sent: await sendInvitation(candidate) })),
+      list.map(async (candidate) => ({
+        candidate,
+        sent: await sendInvitation(candidate),
+      })),
     );
     setInvitations((prev) => ({
       ...prev,
       ...Object.fromEntries(
-        results.map(({ candidate, sent }) => [candidate.id, sent ? ("terkirim" as const) : ("gagal" as const)]),
+        results.map(({ candidate, sent }) => [
+          candidate.id,
+          sent ? ("terkirim" as const) : ("gagal" as const),
+        ]),
       ),
     }));
     const failed = results.filter((item) => !item.sent).length;
@@ -137,13 +160,30 @@ export function DashboardProvider({
         toastFailed,
         setToast,
         approve: (c) =>
-          decide(c, "shortlist", "Shortlist", `HR menyetujui ${c.name} ke shortlist ${c.role}.`),
+          decide(
+            c,
+            "shortlist",
+            "Shortlist",
+            `HR menyetujui ${c.name} ke shortlist ${c.role}.`,
+          ),
         decline: (c) =>
-          decide(c, "reject", "Tidak dilanjutkan", `${c.name} tidak dilanjutkan. Tidak ada email terkirim.`),
+          decide(
+            c,
+            "reject",
+            "Tidak dilanjutkan",
+            `${c.name} tidak dilanjutkan. Tidak ada email terkirim.`,
+          ),
         returnToReview: (c) =>
-          decide(c, "undecided", "Perlu ditinjau", `${c.name} dikembalikan ke tinjauan.`),
-        getDraft: (candidate, company) => drafts[candidate.id] ?? createDraft(candidate, company),
-        saveDraft: (id, draft) => setDrafts((prev) => ({ ...prev, [id]: draft })),
+          decide(
+            c,
+            "undecided",
+            "Perlu ditinjau",
+            `${c.name} dikembalikan ke tinjauan.`,
+          ),
+        getDraft: (candidate, company) =>
+          drafts[candidate.id] ?? createDraft(candidate, company),
+        saveDraft: (id, draft) =>
+          setDrafts((prev) => ({ ...prev, [id]: draft })),
         invitations,
         sendInvitations,
       }}

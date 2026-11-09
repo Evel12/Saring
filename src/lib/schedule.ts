@@ -30,10 +30,14 @@ const toSlot = (s: ApiSlot): InterviewSlot => ({
 const path = (token: string) => decodeURIComponent(token).split(".").join("/");
 
 // Dipanggil di server (halaman /schedule/[token]).
-export async function getScheduleInvite(token: string): Promise<ScheduleInvite | null> {
+export async function getScheduleInvite(
+  token: string,
+): Promise<ScheduleInvite | null> {
   if (!decodeURIComponent(token).includes(".")) return null;
   const api = process.env.API_URL ?? "http://127.0.0.1:8000";
-  const res = await fetch(`${api}/api/v1/schedule/${path(token)}`, { cache: "no-store" });
+  const res = await fetch(`${api}/api/v1/schedule/${path(token)}`, {
+    cache: "no-store",
+  });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Backend ${res.status} on schedule view`);
   const v: {
@@ -54,7 +58,9 @@ export async function getScheduleInvite(token: string): Promise<ScheduleInvite |
     jobTitle: v.title,
     company: v.company,
     format: "Interview · detail dikirim HR",
-    durationMinutes: first ? Math.round((Date.parse(first.end) - Date.parse(first.start)) / 60000) : 0,
+    durationMinutes: first
+      ? Math.round((Date.parse(first.end) - Date.parse(first.start)) / 60000)
+      : 0,
     expiresAt: null,
     slots,
     bookedSlotId: v.booked?.id ?? null,
@@ -62,7 +68,10 @@ export async function getScheduleInvite(token: string): Promise<ScheduleInvite |
 }
 
 // Dipanggil di browser saat pelamar memilih slot.
-export async function bookSlot(token: string, slotId: string): Promise<BookingResult> {
+export async function bookSlot(
+  token: string,
+  slotId: string,
+): Promise<BookingResult> {
   const res = await fetch(`/api/v1/schedule/${path(token)}/book`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

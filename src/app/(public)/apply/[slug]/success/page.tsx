@@ -19,11 +19,7 @@ export default async function ApplySuccessPage({
   if (!job) notFound();
 
   return (
-    <PublicMessage
-      icon={<Check size={22} />}
-      title="Lamaran diterima"
-      success
-    >
+    <PublicMessage icon={<Check size={22} />} title="Lamaran diterima" success>
       <p>
         Lamaranmu untuk posisi <strong>{job.title}</strong> di {job.company}{" "}
         sudah masuk. Kamu boleh menutup halaman ini.

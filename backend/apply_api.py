@@ -22,13 +22,16 @@ def _vacancy(vacancy_id: str, token: str, s) -> m.Vacancy:
     v = s.get(m.Vacancy, vacancy_id)
     if (
         not v
-        or v.deleted_at
-        or v.state != "published"
         or not v.apply_token
         or not secrets.compare_digest(v.apply_token, token)
         or not v.active_requirement_version_id
     ):
         raise HTTPException(404, "This application link is not available")
+    if v.deleted_at or v.state != "published":
+        # Valid link, but HR closed/deleted the vacancy: tell the applicant so.
+        org = s.get(m.Organization, v.org_id)
+        raise HTTPException(410, {"message": "This vacancy is closed",
+            "title": v.title, "company": (org.name if org else "") or ""})
     return v
 
 
@@ -132,6 +135,22 @@ async def apply_submit(
             file.content_type or "application/octet-stream",
         )
         s.flush()
+
+    # Agent autonomy: queue the AI review right away instead of waiting for HR.
+    # The run is attributed to the HR user who approved these criteria.
+    version = s.get(m.RequirementVersion, v.active_requirement_version_id)
+    run = m.WorkflowRun(
+        org_id=v.org_id, vacancy_id=v.id,
+        requirement_version_id=version.id, requested_by=version.approved_by,
+    )
+    s.add(run)
+    s.flush()
+    s.add(m.WorkflowJob(org_id=v.org_id, run_id=run.id, application_id=a.id, kind="review"))
+    svc.event(
+        s, p, "workflow.queued",
+        "Agent automatically queued an evidence review for the new application.",
+        v.id, a.id, run.id, details={"tool": "auto_review", "result": "queued"},
+    )
 
     svc.event(
         s, p, "application.applied",

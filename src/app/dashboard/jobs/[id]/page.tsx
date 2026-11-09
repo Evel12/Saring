@@ -9,13 +9,14 @@ import {
   ExternalLink,
   Link2,
 } from "lucide-react";
-import { formatDate, formatTimeRange } from "@/lib/applicant-demo";
+import { formatDate, formatTimeRange } from "@/lib/schedule";
 import { getJob, type JobSlot } from "@/lib/job-store";
 import { CandidateTable } from "../../candidate-table";
 import { PageHeading } from "../../dashboard-ui";
 import { ApprovalEntry } from "./approval-entry";
 import { CopyLink } from "./copy-link";
 import { RunAnalysis } from "./run-analysis";
+import { DeleteJob } from "./delete-job";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -45,7 +46,9 @@ export default async function JobDetailPage({ params, searchParams }: Props) {
     const day = formatDate(slot.start);
     days.set(day, [...(days.get(day) ?? []), slot]);
   }
-  const emptySlots = job.slots.filter((slot) => slot.status === "kosong").length;
+  const emptySlots = job.slots.filter(
+    (slot) => slot.status === "kosong",
+  ).length;
 
   return (
     <>
@@ -62,10 +65,14 @@ export default async function JobDetailPage({ params, searchParams }: Props) {
           {job.status === "open" ? "Aktif" : "Ditutup"}
         </span>
         <RunAnalysis jobId={job.id} />
-        <Link className="button secondary" href={`/dashboard/jobs/${job.id}/report`}>
+        <Link
+          className="button secondary"
+          href={`/dashboard/jobs/${job.id}/report`}
+        >
           <ChartColumn size={15} />
           Laporan
         </Link>
+        <DeleteJob jobId={job.id} title={job.title} />
       </PageHeading>
 
       {baru && (

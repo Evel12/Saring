@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { CalendarClock, CalendarX2, Link2Off } from "lucide-react";
-import { getScheduleInvite } from "@/lib/applicant-demo";
+import { CalendarClock } from "lucide-react";
+import { getScheduleInvite } from "@/lib/schedule";
 import { PublicMessage } from "../../public-ui";
 import { SlotPicker } from "./slot-picker";
 
@@ -22,32 +22,6 @@ export default async function SchedulePage({
   const invite = await getScheduleInvite(token);
   if (!invite) notFound();
 
-  if (invite.status === "expired")
-    return (
-      <PublicMessage
-        icon={<CalendarX2 size={22} />}
-        tone="sand"
-        title="Link jadwal sudah kedaluwarsa"
-      >
-        <p>
-          Hubungi tim HR {invite.company} untuk meminta link baru. Kesempatan
-          interview-mu tidak otomatis hilang.
-        </p>
-      </PublicMessage>
-    );
-  if (invite.status === "used")
-    return (
-      <PublicMessage
-        icon={<Link2Off size={22} />}
-        tone="sand"
-        title="Link jadwal sudah tidak aktif"
-      >
-        <p>
-          Link ini sudah pernah dipakai. Kalau jadwalmu perlu diubah, hubungi
-          tim HR {invite.company}.
-        </p>
-      </PublicMessage>
-    );
   if (!invite.slots.length)
     return (
       <PublicMessage

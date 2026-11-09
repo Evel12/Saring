@@ -51,6 +51,24 @@ def _github(url):
                 "joined_utc": data.get("created_at") or "",
                 "message": "Public profile metadata from GitHub's documented API; no automated judgment is attached.",
             })
+            # Light crawl via the official API: the 6 most recently pushed own repositories.
+            listed = client.get("https://api.github.com" + subject + "/repos",
+                params={"sort": "pushed", "per_page": 6, "type": "owner"})
+            if listed.status_code == 200:
+                repos = [{
+                    "name": r.get("name") or "", "language": r.get("language") or "",
+                    "description": (r.get("description") or "")[:140], "stars": r.get("stargazers_count") or 0,
+                    "pushed_at": r.get("pushed_at") or "", "fork": bool(r.get("fork")),
+                } for r in listed.json()[:6]]
+                counts = {}
+                for r in repos:
+                    if r["language"] and not r["fork"]:
+                        counts[r["language"]] = counts.get(r["language"], 0) + 1
+                observation["repos"] = repos
+                observation["top_languages"] = ", ".join(
+                    f"{k} ({v})" for k, v in sorted(counts.items(), key=lambda x: -x[1])[:5])
+                if repos:
+                    observation["last_public_commit_utc"] = repos[0]["pushed_at"]
         return observation
 
 
@@ -116,7 +134,9 @@ def _linkedin(url):
 
 
 def observe(url, allow_generic=False):
-    url = url.strip()
+    url = url.strip().rstrip(".,;)")
+    # CVs often drop "www." (linkedin.com/in/x); LinkedIn serves profiles on www only.
+    url = re.sub(r"^https://linkedin\.com/", "https://www.linkedin.com/", url)
     if len(url) > 500 or not url.startswith("https://"):
         raise ValueError("Provide an https link of at most 500 characters")
     if "github.com" in url or "linkedin.com" in url:

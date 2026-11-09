@@ -384,8 +384,9 @@
   opacity: 1;
 }
 .public-slot:has(input:focus-visible) {
-  outline: 3px solid #93b5ff;
-  outline-offset: 3px;
+  border-color: #9a9aa5;
+  box-shadow: 0 0 0 4px #2020241a;
+  outline: none;
 }
 .public-alternatives {
   display: flex;

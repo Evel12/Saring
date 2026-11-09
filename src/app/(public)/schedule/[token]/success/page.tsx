@@ -2,11 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { CalendarCheck, CalendarDays } from "lucide-react";
-import {
-  formatDate,
-  formatTimeRange,
-  getScheduleInvite,
-} from "@/lib/applicant-demo";
+import { formatDate, formatTimeRange, getScheduleInvite } from "@/lib/schedule";
 import { PublicMessage } from "../../../public-ui";
 
 export const metadata: Metadata = {

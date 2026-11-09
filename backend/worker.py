@@ -213,6 +213,25 @@ def provider_diagnosis(exc):
     return type(exc).__name__ + ": review failed; check document/configuration"
 
 
+STOPWORDS = set("the and with for of to using developed experience built "
+    "dan yang dengan untuk di dari pada sebagai pengalaman menggunakan membuat tim".split())
+
+
+def readable_language(texts):
+    """True when the CV looks like Indonesian or English (the languages the agent reviews)."""
+    text = " ".join(texts)
+    letters = [ch for ch in text if ch.isalpha()]
+    if len(letters) < 80:
+        return True  # too little text to judge; OCR/extraction checks handle empty CVs
+    if sum(ch.isascii() for ch in letters) / len(letters) < 0.6:
+        return False  # mostly non-Latin script
+    words = re.findall(r"[^\W\d_]+", text.lower())
+    if len(words) < 60:
+        return True  # skill lists are short and stopword-free; do not flag them
+    # Latin script with almost no Indonesian/English function words: another language.
+    return sum(w in STOPWORDS for w in words) / len(words) >= 0.005
+
+
 def association_provenance(evidence, p, mode):
     """Provenance for a deterministic (model-free) criterion association."""
     from backend import ai_config
@@ -220,7 +239,8 @@ def association_provenance(evidence, p, mode):
     return {"provider": cfg["provider"], "model": cfg["model"],
         "prompt_version": AI_PROMPT_VERSION, "profile_version": AI_PROFILE_VERSION,
         "usage": None,
-        "extraction_version_ids": sorted({e.get("extraction_version_id") for e in evidence if e.get("extraction_version_id")}),
+        # evidence holds EvidenceItem rows here, not dicts (was an AttributeError).
+        "extraction_version_ids": sorted({e.extraction_version_id for e in evidence if e.extraction_version_id}),
         "citations": [], "citations_mode": mode,
         "association_mode": mode,
         "citation_validation": "no eligible overlap; deterministic skip without a model call"}
@@ -357,6 +377,13 @@ def review(s, job, run, p, token):
     progress("evidence", "Linked " + str(len(evidence))
         + " labelled professional lines to sources and criteria.",
         evidence=len(evidence), documents=len(docs))
+    if not readable_language(source_texts):
+        svc.event(s, p, "extraction.unsupported_language",
+            "CV tidak berbahasa Indonesia atau Inggris, jadi agent tidak menilainya. HR perlu membaca CV ini secara manual.",
+            v.id, a.id, run.id, details={"tool": "language_check", "result": "unsupported"})
+        a.review_state = "ready_for_review"
+        s.commit()
+        return
     from backend import clarification as clarification_loop
     prior_loop = clarification_loop.workflow_for(s, a, False)
     prior_round = s.get(m.ClarificationRound, prior_loop.round_id) if prior_loop and prior_loop.round_id else None

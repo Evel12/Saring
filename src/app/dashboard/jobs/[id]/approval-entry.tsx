@@ -4,7 +4,13 @@ import Link from "next/link";
 import { ArrowRight, MailCheck } from "lucide-react";
 import { useDashboard } from "../../dashboard-context";
 
-export function ApprovalEntry({ jobId, role }: { jobId: string; role: string }) {
+export function ApprovalEntry({
+  jobId,
+  role,
+}: {
+  jobId: string;
+  role: string;
+}) {
   const { candidates } = useDashboard();
   const count = candidates.filter(
     (c) => c.role === role && c.status === "Shortlist",

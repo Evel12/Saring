@@ -571,7 +571,10 @@ def application_insights(id: str, p=Depends(auth.recruiter), s=Depends(get_db)):
                    "languages": row.payload.get("languages", ""),
                    "public_repositories": row.payload.get("public_repositories"),
                    "last_public_commit_utc": row.payload.get("last_public_commit_utc", ""),
-                   "fork": row.payload.get("fork")},
+                   "fork": row.payload.get("fork"),
+                   "bio": row.payload.get("bio", ""),
+                   "top_languages": row.payload.get("top_languages", ""),
+                   "repos": row.payload.get("repos", [])},
             }
     return {"application_id": a.id, "summary": summary,
             "strengths": strengths[:8], "relevant_details": details[:10], "links": list(links.values())}
@@ -912,6 +915,7 @@ def run_create(body: d.RunInput, p=Depends(auth.recruiter), s=Depends(get_db)):
         p,
         svc.own(s, m.Vacancy, body.vacancy_id, p),
         reextract=body.reextract_documents,
+        pending_only=body.pending_only,
     )
     s.commit()
     return svc.public(row)

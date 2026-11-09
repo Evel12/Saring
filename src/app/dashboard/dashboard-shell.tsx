@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -22,7 +23,6 @@ import {
   ChevronDown,
   ChevronRight,
   CircleHelp,
-  Funnel,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -30,13 +30,13 @@ import {
   Plus,
   Search,
   Settings2,
-  ShieldCheck,
   Sparkles,
   Users,
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useDashboard } from "./dashboard-context";
+import { LogoMark } from "../brand-logo";
 import { post } from "@/lib/api";
 import { roleLabel, type Me } from "@/lib/session";
 import { playIntro, resetIntro } from "@/lib/intro";
@@ -49,7 +49,11 @@ const navigation: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Ringkasan", href: "/dashboard", icon: LayoutDashboard },
   { label: "Lowongan", href: "/dashboard/jobs", icon: BriefcaseBusiness },
   { label: "Kandidat", href: CANDIDATES, icon: Users },
-  { label: "Jadwal interview", href: "/dashboard/schedule", icon: CalendarDays },
+  {
+    label: "Jadwal interview",
+    href: "/dashboard/schedule",
+    icon: CalendarDays,
+  },
   { label: "Aktivitas agent", href: "/dashboard/activity", icon: Activity },
 ];
 
@@ -59,12 +63,23 @@ function isActive(pathname: string, href: string) {
     : pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function DashboardShell({ children, me }: { children: ReactNode; me: Me }) {
+export function DashboardShell({
+  children,
+  me,
+}: {
+  children: ReactNode;
+  me: Me;
+}) {
   const org =
     me.memberships.find((m) => m.org_id === me.organization_id)
       ?.organization_name ?? "Organisasi";
   const role = roleLabel(me.role);
-  const initials = org.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+  const initials = org
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
   async function logout() {
     await post("/auth/logout").catch(() => undefined);
     resetIntro();
@@ -74,7 +89,6 @@ export function DashboardShell({ children, me }: { children: ReactNode; me: Me }
   const pathname = usePathname();
   const {
     jobs,
-    openJobs,
     candidates,
     pending,
     failedInvitations,
@@ -156,7 +170,9 @@ export function DashboardShell({ children, me }: { children: ReactNode; me: Me }
   }
 
   const section = navigation.find((item) => isActive(pathname, item.href));
-  const jobMatch = pathname.match(/^\/dashboard\/jobs\/([^/]+)(\/approval|\/report)?$/);
+  const jobMatch = pathname.match(
+    /^\/dashboard\/jobs\/([^/]+)(\/approval|\/report)?$/,
+  );
   const candidateId = pathname.match(/^\/dashboard\/candidates\/(\d+)$/)?.[1];
   const subPage =
     jobMatch?.[1] === "new"
@@ -186,16 +202,13 @@ export function DashboardShell({ children, me }: { children: ReactNode; me: Me }
           onClick={closeMenus}
         >
           <span className="brand-mark">
-            <Funnel size={23} strokeWidth={2} />
+            <LogoMark size={22} />
           </span>
           saring<span className="brand-dot">.</span>
-          <ChevronDown size={16} className="brand-chevron" />
         </Link>
         <button
           className="workspace-switch"
-          onClick={() =>
-            setToast(`Kamu berada di workspace ${org}.`)
-          }
+          onClick={() => setToast(`Kamu berada di workspace ${org}.`)}
         >
           <span className="workspace-avatar">{initials[0]}</span>
           <span>
@@ -216,48 +229,59 @@ export function DashboardShell({ children, me }: { children: ReactNode; me: Me }
           activeKey={activePath}
         >
           {navigation.map(({ label, href, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className={`nav-item ${isActive(activePath, href) ? "active" : ""}`}
-              aria-current={isActive(pathname, href) ? "page" : undefined}
-              data-active={isActive(activePath, href)}
-              onClick={(event) => selectNav(event, href)}
-            >
-              <Icon size={18} />
-              <span>{label}</span>
-              {label === "Lowongan" && (
-                <span className="nav-count">{jobs.length}</span>
+            <Fragment key={href}>
+              <Link
+                href={href}
+                className={`nav-item ${isActive(activePath, href) ? "active" : ""}`}
+                aria-current={isActive(pathname, href) ? "page" : undefined}
+                data-active={isActive(activePath, href)}
+                onClick={(event) => selectNav(event, href)}
+              >
+                <Icon size={18} />
+                <span>{label}</span>
+                {label === "Lowongan" && (
+                  <span className="nav-count">{jobs.length}</span>
+                )}
+                {label === "Kandidat" && (
+                  <span className="nav-count">{candidates.length}</span>
+                )}
+              </Link>
+              {label === "Lowongan" && isActive(activePath, href) && (
+                <div
+                  className="nav-sub"
+                  role="group"
+                  aria-label="Daftar lowongan"
+                >
+                  {jobs.map((job) => {
+                    const jobHref = `/dashboard/jobs/${job.id}`;
+                    const current = isActive(activePath, jobHref);
+                    return (
+                      <Link
+                        key={job.id}
+                        href={jobHref}
+                        className={`collection-item ${current ? "active" : ""} ${job.status === "closed" ? "closed" : ""}`}
+                        aria-current={current ? "page" : undefined}
+                        onClick={(event) => selectNav(event, jobHref)}
+                      >
+                        <span className={`collection-dot ${job.color}`} />
+                        <span>{job.title}</span>
+                        <ChevronRight size={13} />
+                      </Link>
+                    );
+                  })}
+                  <Link
+                    href="/dashboard/jobs/new"
+                    className={`collection-add ${activePath === "/dashboard/jobs/new" ? "active" : ""}`}
+                    onClick={(event) => selectNav(event, "/dashboard/jobs/new")}
+                  >
+                    <Plus size={16} />
+                    Tambah lowongan
+                  </Link>
+                </div>
               )}
-              {label === "Kandidat" && (
-                <span className="nav-count">{candidates.length}</span>
-              )}
-            </Link>
+            </Fragment>
           ))}
         </IndicatorGroup>
-        <div className="sidebar-collections">
-          <span className="nav-label">Lowongan tim</span>
-          {openJobs.slice(0, 4).map((job) => (
-            <Link
-              key={job.id}
-              href={`/dashboard/jobs/${job.id}`}
-              className="collection-item"
-              onClick={closeMenus}
-            >
-              <span className={`collection-dot ${job.color}`} />
-              <span>{job.title}</span>
-              <ChevronRight size={13} />
-            </Link>
-          ))}
-          <Link
-            href="/dashboard/jobs/new"
-            className="collection-add"
-            onClick={closeMenus}
-          >
-            <Plus size={16} />
-            Tambah lowongan
-          </Link>
-        </div>
         <div className="sidebar-bottom">
           <div className="agent-status-card">
             <span className="agent-orb">
@@ -323,16 +347,6 @@ export function DashboardShell({ children, me }: { children: ReactNode; me: Me }
             )}
           </div>
           <div className="topbar-actions">
-            <button
-              className="search-shortcut"
-              aria-label="Cari kandidat"
-              onClick={goSearch}
-            >
-              <Search size={16} />
-              <span>Cari kandidat...</span>
-              <kbd>/</kbd>
-            </button>
-            <span className="topbar-divider" />
             <div className="notification-wrap">
               <button
                 className={`icon-button notification-button ${notifications ? "selected" : ""}`}
@@ -353,8 +367,8 @@ export function DashboardShell({ children, me }: { children: ReactNode; me: Me }
                   </p>
                   {failedInvitations > 0 && (
                     <p>
-                      {failedInvitations} email undangan gagal terkirim. Buka
-                      halaman persetujuan lowongan untuk mencoba lagi.
+                      {failedInvitations} link jadwal gagal dibuat. Buka halaman
+                      persetujuan lowongan untuk mencoba lagi.
                     </p>
                   )}
                   <Link
@@ -456,7 +470,11 @@ export function DashboardShell({ children, me }: { children: ReactNode; me: Me }
                 >
                   Tutup
                 </button>
-                <button className="button primary" type="button" onClick={logout}>
+                <button
+                  className="button primary"
+                  type="button"
+                  onClick={logout}
+                >
                   <LogOut size={15} />
                   Keluar
                 </button>
@@ -482,12 +500,12 @@ export function DashboardShell({ children, me }: { children: ReactNode; me: Me }
                   [
                     "02",
                     "Kenali kandidat",
-                    "Tinjau kecocokan, bukti pendukung, dan hal yang perlu diklarifikasi.",
+                    "Agent membaca CV pelamar baru, menilai tiap kriteria, dan menandai bukti yang masih kurang.",
                   ],
                   [
                     "03",
                     "Tentukan langkah berikutnya",
-                    "Setujui kandidat untuk shortlist. Keputusan tetap di tangan HR.",
+                    "Setujui shortlist dan kirim link jadwal interview. Keputusan tetap di tangan HR.",
                   ],
                 ].map(([num, title, desc]) => (
                   <div key={num}>
@@ -500,8 +518,8 @@ export function DashboardShell({ children, me }: { children: ReactNode; me: Me }
                 ))}
               </div>
               <div className="notice">
-                Ini prototipe interaktif dengan data fiktif. Analisis AI, email,
-                dan kalender belum terhubung.
+                Email belum dikirim otomatis: link jadwal disalin atau dibuka di
+                aplikasi emailmu dari halaman persetujuan.
               </div>
               <button
                 className="button primary help-done"

@@ -1,5 +1,5 @@
 import { AlertTriangle, Check, RotateCcw, UserRound } from "lucide-react";
-import { formatDateTime } from "@/lib/applicant-demo";
+import { formatDateTime } from "@/lib/schedule";
 import type { LogEntry } from "@/lib/agent-log";
 
 export const STATE_LABEL: Record<LogEntry["state"], string> = {

@@ -9,8 +9,9 @@ export default function ScheduleNotFound() {
       title="Link jadwal tidak ditemukan"
     >
       <p>
-        Pastikan kamu membuka link lengkap dari email undangan. Kalau masih
-        bermasalah, hubungi tim HR yang mengirim undangan.
+        Pastikan kamu membuka link lengkap yang dikirim tim HR. Link hanya
+        berlaku selama kamu masih di tahap interview. Kalau masih bermasalah,
+        hubungi tim HR yang mengirim undangan.
       </p>
     </PublicMessage>
   );

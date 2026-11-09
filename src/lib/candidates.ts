@@ -2,9 +2,19 @@
 
 export type SkillStatus = "verified" | "claimed" | "contradicted" | "unknown";
 
-export type SkillCheck = { name: string; status: SkillStatus; evidence: string };
+export type SkillCheck = {
+  name: string;
+  status: SkillStatus;
+  evidence: string;
+  essential?: boolean;
+};
 
-export type ScorePart = { label: string; score: number; max: number; quote: string };
+export type ScorePart = {
+  label: string;
+  score: number;
+  max: number;
+  quote: string;
+};
 
 export type AgentStep = {
   tool: string;
@@ -14,6 +24,23 @@ export type AgentStep = {
   state: "ok" | "recovered" | "flagged";
   at?: string;
   actor?: "agent" | "hr";
+};
+
+/** Hasil tool cek link agent (GitHub lewat API resmi, situs lain hanya judul). */
+export type LinkInfo = {
+  url: string;
+  state: string;
+  title: string;
+  subject: string;
+  publicRepos: number | null;
+  topLanguages: string;
+  lastActivity: string;
+  repos: {
+    name: string;
+    language: string;
+    description: string;
+    stars: number;
+  }[];
 };
 
 export type InterviewQuestion = { question: string; reason: string };
@@ -37,6 +64,8 @@ export type Candidate = {
   /** % kriteria yang punya bukti (didukung = 1, sebagian = ½). Bukan keputusan. */
   score: number;
   analyzed: boolean;
+  /** Sudah pernah dianalisis agent untuk kriteria saat ini (berhasil atau ditandai). */
+  reviewed: boolean;
   status: CandidateStatus;
   experience: string;
   appliedAt: string;
@@ -48,10 +77,15 @@ export type Candidate = {
   scoreParts: ScorePart[];
   reviewReasons: string[];
   hiddenFields: string[];
-  cvExcerpt: string;
+  /** Baris CV yang dibaca agent, sudah dirapikan untuk ditampilkan. */
+  cvExcerpt: string[];
   pipeline: AgentStep[];
   questions: InterviewQuestion[];
   scheduleToken?: string | null;
+  documents: { id: string; name: string }[];
+  /** Jawaban form lamaran: pertanyaan -> jawaban */
+  answers: Record<string, string>;
+  links: LinkInfo[];
   invitedAt?: string;
   reminderSentAt?: string;
 };

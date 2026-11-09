@@ -10,7 +10,7 @@ import {
   Plus,
   Video,
 } from "lucide-react";
-import { formatDayMonth, formatTime } from "@/lib/applicant-demo";
+import { formatDayMonth, formatTime } from "@/lib/schedule";
 import type { Interview } from "@/lib/candidates";
 import { useDashboard } from "./dashboard-context";
 
@@ -105,7 +105,9 @@ export function JobCards({ full = false }: { full?: boolean }) {
 }
 
 export function upcomingInterviews(interviews: Interview[]) {
-  return [...interviews].sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+  return [...interviews].sort(
+    (a, b) => Date.parse(a.start) - Date.parse(b.start),
+  );
 }
 
 export function SchedulePanel() {
@@ -121,7 +123,9 @@ export function SchedulePanel() {
       </div>
       <div className="schedule-date">
         <span>
-          {list.length ? `Mulai ${formatDayMonth(list[0].start)}` : "Belum ada jadwal"}
+          {list.length
+            ? `Mulai ${formatDayMonth(list[0].start)}`
+            : "Belum ada jadwal"}
         </span>
         <span className="count">{list.length} interview</span>
       </div>

@@ -590,7 +590,7 @@ def submit_responses(s, p, a, invitation, body):
     return submit(s, p, a, invitation, body)
 
 
-def create_run(s, p, v, reextract=False):
+def create_run(s, p, v, reextract=False, pending_only=False):
     if not v.active_requirement_version_id:
         raise HTTPException(409, "Approve requirements first")
     if s.scalar(
@@ -610,6 +610,18 @@ def create_run(s, p, v, reextract=False):
             )
         )
     )
+    if pending_only:
+        reviewed = set(s.scalars(
+            select(m.WorkflowJob.application_id)
+            .join(m.WorkflowRun, m.WorkflowRun.id == m.WorkflowJob.run_id)
+            .where(
+                m.WorkflowJob.org_id == p.org_id,
+                m.WorkflowJob.state == "done",
+                m.WorkflowRun.vacancy_id == v.id,
+                m.WorkflowRun.requirement_version_id == v.active_requirement_version_id,
+            )
+        ))
+        applications = [a for a in applications if a.id not in reviewed]
     if not applications:
         raise HTTPException(409, "No applications to review")
     run = m.WorkflowRun(

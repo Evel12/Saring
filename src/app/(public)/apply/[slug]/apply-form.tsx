@@ -48,7 +48,9 @@ function validateLink(value: string) {
   return "Link belum benar. Contoh: github.com/nama-kamu.";
 }
 function validateConsent(value: boolean) {
-  return value ? undefined : "Centang persetujuan ini agar lamaran bisa dikirim.";
+  return value
+    ? undefined
+    : "Centang persetujuan ini agar lamaran bisa dikirim.";
 }
 function formatFileSize(bytes: number) {
   return bytes < 1024 * 1024
@@ -72,7 +74,12 @@ function validateAnswer(value: string) {
 
 async function submitApplication(
   slug: string,
-  input: { name: string; email: string; cv: File; answers: Record<string, string> },
+  input: {
+    name: string;
+    email: string;
+    cv: File;
+    answers: Record<string, string>;
+  },
 ) {
   const parts = splitSlug(slug);
   if (!parts) throw new Error("Link lamaran tidak valid.");
@@ -90,22 +97,30 @@ async function submitApplication(
   throw new Error(
     res.status === 429
       ? "Terlalu banyak lamaran dari link ini. Coba lagi nanti."
-      : res.status === 404
-        ? "Lowongan ini sudah ditutup."
+      : res.status === 404 || res.status === 410
+        ? "Pendaftaran untuk lowongan ini sudah ditutup."
         : typeof data.detail === "string"
           ? data.detail
           : "Periksa koneksi internet, lalu coba kirim lagi.",
   );
 }
 
-export function ApplyForm({ slug, questions }: { slug: string; questions: string[] }) {
+export function ApplyForm({
+  slug,
+  questions,
+}: {
+  slug: string;
+  questions: string[];
+}) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [cv, setCv] = useState<File | null>(null);
   const [link, setLink] = useState("");
   const [consent, setConsent] = useState(false);
-  const [answers, setAnswers] = useState<string[]>(() => questions.map(() => ""));
+  const [answers, setAnswers] = useState<string[]>(() =>
+    questions.map(() => ""),
+  );
   const [errors, setErrors] = useState<Errors>({});
   const [dragging, setDragging] = useState(false);
   const [sending, setSending] = useState(false);
@@ -166,7 +181,8 @@ export function ApplyForm({ slug, questions }: { slug: string; questions: string
       const filled = Object.fromEntries(
         questions.map((q, i) => [q.slice(0, 80), answers[i].trim()]),
       );
-      if (link.trim()) filled["Link GitHub atau portofolio"] = normalizeLink(link);
+      if (link.trim())
+        filled["Link GitHub atau portofolio"] = normalizeLink(link);
       await submitApplication(slug, {
         name: name.trim(),
         email: email.trim(),
@@ -181,7 +197,11 @@ export function ApplyForm({ slug, questions }: { slug: string; questions: string
   }
 
   return (
-    <form className="panel public-card public-form" onSubmit={onSubmit} noValidate>
+    <form
+      className="panel public-card public-form"
+      onSubmit={onSubmit}
+      noValidate
+    >
       <div className="public-form-heading">
         <h2>Data lamaran</h2>
         <p>Semua kolom wajib diisi, kecuali yang bertanda opsional.</p>
@@ -218,7 +238,8 @@ export function ApplyForm({ slug, questions }: { slug: string; questions: string
             aria-describedby={errors.email ? "apply-email-error" : undefined}
             onChange={(e) => {
               setEmail(e.target.value);
-              if (errors.email) setError("email", validateEmail(e.target.value));
+              if (errors.email)
+                setError("email", validateEmail(e.target.value));
             }}
           />
           <FieldError id="apply-email-error" message={errors.email} />
@@ -317,14 +338,19 @@ export function ApplyForm({ slug, questions }: { slug: string; questions: string
             maxLength={2000}
             value={answers[i]}
             aria-invalid={i === 0 && !!errors.answer}
-            aria-describedby={i === 0 && errors.answer ? "apply-answer-error" : undefined}
+            aria-describedby={
+              i === 0 && errors.answer ? "apply-answer-error" : undefined
+            }
             onChange={(e) => {
               const value = e.target.value;
               setAnswers((prev) => prev.map((x, j) => (j === i ? value : x)));
-              if (i === 0 && errors.answer) setError("answer", validateAnswer(value));
+              if (i === 0 && errors.answer)
+                setError("answer", validateAnswer(value));
             }}
           />
-          {i === 0 && <FieldError id="apply-answer-error" message={errors.answer} />}
+          {i === 0 && (
+            <FieldError id="apply-answer-error" message={errors.answer} />
+          )}
         </div>
       ))}
 
@@ -335,7 +361,9 @@ export function ApplyForm({ slug, questions }: { slug: string; questions: string
             type="checkbox"
             checked={consent}
             aria-invalid={!!errors.consent}
-            aria-describedby={errors.consent ? "apply-consent-error" : undefined}
+            aria-describedby={
+              errors.consent ? "apply-consent-error" : undefined
+            }
             onChange={(e) => {
               setConsent(e.target.checked);
               if (errors.consent)
@@ -343,8 +371,8 @@ export function ApplyForm({ slug, questions }: { slug: string; questions: string
             }}
           />
           <span>
-            Saya setuju Saring memproses CV dan jawaban saya untuk lamaran
-            ini. Baca{" "}
+            Saya setuju Saring memproses CV dan jawaban saya untuk lamaran ini.
+            Baca{" "}
             <Link href="/privacy" target="_blank">
               kebijakan privasi
             </Link>

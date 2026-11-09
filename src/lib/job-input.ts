@@ -42,15 +42,14 @@ export function validateJobInput(input: JobInput) {
   if (!JOB_TYPES.includes(input.type)) errors.type = "Pilih tipe pekerjaan.";
   if (!input.location.trim()) errors.location = "Isi lokasi kerja.";
   if (!input.description.trim())
-    errors.description = "Isi deskripsi pekerjaan. Agent menilai pelamar dari sini.";
+    errors.description =
+      "Isi deskripsi pekerjaan. Agent menilai pelamar dari sini.";
   if (!input.requiredSkills.length)
     errors.requiredSkills = "Tambahkan minimal satu skill wajib.";
   if (!input.slots.length)
     errors.slots = "Tambahkan minimal satu slot interview.";
   else if (
-    input.slots.some(
-      (slot) => !(Date.parse(slot.start) < Date.parse(slot.end)),
-    )
+    input.slots.some((slot) => !(Date.parse(slot.start) < Date.parse(slot.end)))
   )
     errors.slots = "Ada slot dengan waktu yang tidak valid.";
   return errors;

@@ -1,6 +1,6 @@
 # Deployment recipe — not a deployment claim
 
-The application has been run locally with SQLite, API, worker and Vite. No public deployment or PostgreSQL/Compose production validation is claimed.
+The application has been run locally with SQLite, API, worker and the Next.js frontend. No public deployment or PostgreSQL/Compose production validation is claimed.
 
 ## Components and release order
 
@@ -19,7 +19,7 @@ Copy `.env.example` to `.env`, then `docker compose up --build`. It starts Postg
 
 ## Release verification and operations
 
-Check `/api/health` (**mode live**, schema 010), login/CSRF, private download denial, own-tenant queries, one small real extraction, source citations, worker attempt history and event reconnection. Confirm unconfigured integrations return truthful disconnected errors. Use the UI to approve a test invite, verify actual provider IDs, force a conflict, reschedule the same event and cancel it. Never use real candidates for a first integration test.
+Check `/api/health` (**mode live**, schema 014), login/CSRF, private download denial, own-tenant queries, one small real extraction, source citations, worker attempt history and event reconnection. Confirm unconfigured integrations return truthful disconnected errors. Use the UI to approve a test invite, verify actual provider IDs, force a conflict, reschedule the same event and cancel it. Never use real candidates for a first integration test.
 
 Monitor queue age, failed/unknown actions, expired credentials, processing durations, interrupted attempts, file-deletion attention states and database/storage capacity. Metrics do not imply candidate accuracy or savings. Model cost is only a configured-price estimate of recorded usage, not complete provider billing. Do not log HTTP request bodies, invitation fragments, applicant documents or raw model prompts. Rotate/revoke provider credentials and sessions; back up encryption keys securely or encrypted OAuth tokens will be unrecoverable.
 

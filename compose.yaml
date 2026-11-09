@@ -41,7 +41,9 @@ services:
     restart: unless-stopped
   web:
     build: {context: ., dockerfile: Dockerfile.web}
-    ports: ["127.0.0.1:8080:80"]
+    environment:
+      API_URL: http://api:8000
+    ports: ["127.0.0.1:8080:3000"]
     depends_on: [api]
     restart: unless-stopped
 volumes:

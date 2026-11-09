@@ -213,6 +213,8 @@ class ApprovalInput(Input):
 class RunInput(Input):
     vacancy_id: str
     reextract_documents: bool = False
+    # Only applicants without a completed review of the current criteria.
+    pending_only: bool = False
 
 
 class ControlInput(Input):
@@ -273,7 +275,7 @@ def output(model):
                 if c.name == "passages"
                 else (
                     list[str]
-                    if c.name in ("scopes", "acceptable_evidence_types")
+                    if c.name in ("scopes", "acceptable_evidence_types", "intro_questions")
                     else dict[str, Any]
                 )
             )

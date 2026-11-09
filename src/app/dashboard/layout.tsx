@@ -20,7 +20,11 @@ export default async function DashboardLayout({
   const jobs = await listJobs();
   const { candidates, interviews } = await loadCandidates(jobs);
   return (
-    <DashboardProvider jobs={jobs} candidates={candidates} interviews={interviews}>
+    <DashboardProvider
+      jobs={jobs}
+      candidates={candidates}
+      interviews={interviews}
+    >
       <DashboardShell me={me}>{children}</DashboardShell>
     </DashboardProvider>
   );

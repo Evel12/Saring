@@ -3,14 +3,14 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Search } from "lucide-react";
-import { formatDate, formatTime } from "@/lib/applicant-demo";
+import { formatDate, formatTime } from "@/lib/schedule";
 import { buildLog, type LogEntry } from "@/lib/agent-log";
 import { useDashboard } from "../dashboard-context";
 import { PageHeading } from "../dashboard-ui";
 import { IndicatorGroup } from "../indicator-group";
 import { LogIcon, STATE_LABEL } from "./log-ui";
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 10;
 
 const FILTERS: { label: string; match: (entry: LogEntry) => boolean }[] = [
   { label: "Semua", match: () => true },
@@ -31,7 +31,11 @@ export default function ActivityPage() {
   const log = buildLog(candidates, hrEvents);
   const agentSteps = log.filter((e) => e.actor === "agent");
   const counts = [
-    { label: "Langkah agent", value: agentSteps.length, note: "Tool yang dijalankan" },
+    {
+      label: "Langkah agent",
+      value: agentSteps.length,
+      note: "Tool yang dijalankan",
+    },
     {
       label: "Dipulihkan otomatis",
       value: agentSteps.filter((e) => e.state === "recovered").length,
@@ -52,7 +56,8 @@ export default function ActivityPage() {
   const match = FILTERS.find((item) => item.label === filter)!.match;
   const shown = log.filter(
     (entry) =>
-      match(entry) && (!candidateId || String(entry.candidateId) === candidateId),
+      match(entry) &&
+      (!candidateId || String(entry.candidateId) === candidateId),
   );
   const days = new Map<string, LogEntry[]>();
   for (const entry of shown.slice(0, limit)) {
@@ -66,7 +71,10 @@ export default function ActivityPage() {
         title="Aktivitas agent"
         description="Setiap tool yang dijalankan agent, hasilnya, dan keputusan HR, dalam satu jejak."
       />
-      <section className="stats-panel log-stats" aria-label="Ringkasan aktivitas">
+      <section
+        className="stats-panel log-stats"
+        aria-label="Ringkasan aktivitas"
+      >
         {counts.map((item) => (
           <div className="stat" key={item.label}>
             <div>

@@ -4,14 +4,8 @@ import { useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  ArrowRight,
-  LoaderCircle,
-  Plus,
-  TriangleAlert,
-  X,
-} from "lucide-react";
-import { formatDate, formatTimeRange } from "@/lib/applicant-demo";
+import { ArrowRight, LoaderCircle, Plus, TriangleAlert, X } from "lucide-react";
+import { formatDate, formatTimeRange } from "@/lib/schedule";
 import {
   DEPARTMENTS,
   JOB_TYPES,
@@ -183,7 +177,8 @@ export function JobForm({ today }: { today: string }) {
     }
     const endMs = startMs + Number(slotDuration) * 60_000;
     const overlaps = slots.some(
-      (slot) => startMs < Date.parse(slot.end) && endMs > Date.parse(slot.start),
+      (slot) =>
+        startMs < Date.parse(slot.end) && endMs > Date.parse(slot.start),
     );
     if (overlaps) {
       setSlotError("Slot ini bertabrakan dengan slot yang sudah ada.");
@@ -229,7 +224,9 @@ export function JobForm({ today }: { today: string }) {
       router.refresh();
       return;
     } catch (err) {
-      setSendFailed(err instanceof ApiError ? err.message : "server tidak terhubung");
+      setSendFailed(
+        err instanceof ApiError ? err.message : "server tidak terhubung",
+      );
     }
     setSending(false);
   }

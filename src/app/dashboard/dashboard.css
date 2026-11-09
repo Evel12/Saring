@@ -140,8 +140,9 @@
   border-color: #bfbfcd;
 }
 .job-skill-input:focus-within {
-  outline: 3px solid #93b5ff;
-  outline-offset: 3px;
+  border-color: #9a9aa5;
+  box-shadow: 0 0 0 4px #2020241a;
+  outline: none;
 }
 .job-skill-input input,
 .job-skill-input input:hover {
@@ -567,13 +568,31 @@
 }
 .review-excerpt {
   margin: 0;
-  padding: 12px 14px;
+  padding: 6px 14px;
+  list-style: none;
   border: 1px solid #e4e4ea;
   border-radius: 12px;
   background: #fafafb;
   color: #4f4f59;
-  font-size: 12px;
-  line-height: 2;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.review-excerpt li {
+  padding: 8px 0 8px 14px;
+  position: relative;
+}
+.review-excerpt li + li {
+  border-top: 1px dashed #e4e4ea;
+}
+.review-excerpt li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 15px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #b5b5be;
 }
 .review-excerpt mark {
   display: inline-flex;
@@ -1444,11 +1463,13 @@ nav.has-indicator .nav-item.active {
 ::view-transition-new(root) {
   animation: none;
 }
+/* Berurutan, bukan bersamaan: isi baru baru muncul setelah isi lama hilang,
+   supaya teks dua halaman tidak sempat bertumpuk. */
 ::view-transition-old(.page-exit) {
-  animation: page-fade-out 120ms ease-in both;
+  animation: page-fade-out 90ms ease-in both;
 }
 ::view-transition-new(.page-enter) {
-  animation: page-fade-in 200ms var(--ease) both;
+  animation: page-fade-in 200ms var(--ease) 90ms both;
 }
 @keyframes page-fade-out {
   to {
@@ -1524,4 +1545,110 @@ nav.has-indicator .nav-item.active {
       opacity: 0;
     }
   }
+}
+
+/* Tombol analisis saat agent bekerja: denyut halus supaya terlihat hidup. */
+.button.agent-running {
+  animation: agent-pulse 1.6s ease-in-out infinite;
+}
+@keyframes agent-pulse {
+  50% {
+    box-shadow: 0 0 0 6px #20202414;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .button.agent-running {
+    animation: none;
+  }
+}
+
+/* Sub-menu lowongan di bawah "Lowongan": lowongan yang sedang dibuka ditandai. */
+.nav-sub {
+  margin: 2px 0 6px 21px;
+  padding-left: 8px;
+  border-left: 1px solid #e2e2e8;
+}
+.nav-sub .collection-item.active,
+.nav-sub .collection-add.active {
+  background: #fff;
+  color: #202024;
+  font-weight: 600;
+  box-shadow: 0 1px 2px #0000000f;
+}
+.nav-sub .collection-item.active > svg {
+  opacity: 1;
+}
+.nav-sub .collection-item.closed {
+  opacity: 0.55;
+}
+
+/* Hasil cek link agent di detail kandidat. */
+.link-checks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+.link-checks > li {
+  padding: 12px;
+  border: 1px solid #e4e4ea;
+  border-radius: 12px;
+  background: #fafafb;
+}
+.link-checks p {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #5e5e6a;
+}
+.link-check-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+}
+.link-check-top a {
+  color: #202024;
+  font-weight: 600;
+  word-break: break-all;
+}
+.link-state {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  border: 1px solid #e0e0e7;
+  background: #fff;
+  color: #6b6b76;
+}
+.link-state.observed {
+  color: #2f7a4f;
+  border-color: #cfe8d9;
+}
+.link-state.not_found,
+.link-state.unreachable {
+  color: #a35b16;
+  border-color: #f0dcc4;
+}
+.link-repos {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  font-size: 11.5px;
+}
+.link-repos li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: baseline;
+}
+.link-repos span {
+  color: #6b6b76;
+}
+.link-repos small {
+  flex-basis: 100%;
+  color: #8a8a95;
 }

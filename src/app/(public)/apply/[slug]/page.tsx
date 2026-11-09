@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { BriefcaseBusiness, ShieldCheck } from "lucide-react";
+import { BriefcaseBusiness, CalendarX2, ShieldCheck } from "lucide-react";
 import { getApplyJob } from "@/lib/public-apply";
-import { NextSteps } from "../../public-ui";
+import { NextSteps, PublicMessage } from "../../public-ui";
 import { ApplyForm } from "./apply-form";
 
 type Props = { params: Promise<{ slug: string }> };
@@ -21,6 +21,20 @@ export default async function ApplyPage({ params }: Props) {
   const { slug } = await params;
   const job = await getApplyJob(slug);
   if (!job) notFound();
+
+  if (job.closed)
+    return (
+      <PublicMessage
+        icon={<CalendarX2 size={22} />}
+        tone="sand"
+        title="Pendaftaran sudah ditutup"
+      >
+        <p>
+          {job.company} tidak lagi menerima lamaran untuk posisi {job.title}.
+          Lamaran yang sudah masuk tetap diproses.
+        </p>
+      </PublicMessage>
+    );
 
   return (
     <>

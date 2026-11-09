@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -7,8 +8,8 @@ import {
   Check,
   CheckCheck,
   CircleSlash,
-  EyeOff,
   FileText,
+  Link2,
   MessageCircleQuestion,
   RotateCcw,
   ShieldCheck,
@@ -16,11 +17,7 @@ import {
   Undo2,
   Wrench,
 } from "lucide-react";
-import {
-  formatDate,
-  formatDateTime,
-  formatTimeRange,
-} from "@/lib/applicant-demo";
+import { formatDate, formatTimeRange } from "@/lib/schedule";
 import {
   SHORTLIST_RULE,
   type AgentStep,
@@ -49,27 +46,22 @@ const STEP_NOTE: Record<AgentStep["state"], string> = {
   flagged: "Diteruskan ke HR",
 };
 
-function CvExcerpt({ text }: { text: string }) {
+function CvExcerpt({ lines }: { lines: string[] }) {
   return (
-    <blockquote className="review-excerpt">
-      {text.split(/(\[\[[^\]]+\]\])/).map((part, index) =>
-        part.startsWith("[[") ? (
-          <mark key={index}>
-            <EyeOff size={11} />
-            {part.slice(2, -2)} disembunyikan
-          </mark>
-        ) : (
-          part
-        ),
-      )}
-    </blockquote>
+    <ul className="review-excerpt">
+      {lines.map((line, index) => (
+        <li key={index}>{line}</li>
+      ))}
+    </ul>
   );
 }
 
 function DecisionPanel({ candidate }: { candidate: Candidate }) {
   const { jobs, interviews, approve, decline, returnToReview } = useDashboard();
   const job = jobs.find((item) => item.id === candidate.jobId);
-  const interview = interviews.find((item) => item.candidateId === candidate.id);
+  const interview = interviews.find(
+    (item) => item.candidateId === candidate.id,
+  );
   return (
     <section className="panel job-panel review-decision">
       <h2>Keputusanmu</h2>
@@ -77,8 +69,8 @@ function DecisionPanel({ candidate }: { candidate: Candidate }) {
         {candidate.status === "Perlu ditinjau" && (
           <>
             <p className="job-panel-intro">
-              Setujui untuk masuk shortlist, atau jangan lanjutkan. Belum ada email
-              yang terkirim.
+              Setujui untuk masuk shortlist, atau jangan lanjutkan. Belum ada
+              email yang terkirim.
             </p>
             <button
               className="button primary review-action"
@@ -124,15 +116,16 @@ function DecisionPanel({ candidate }: { candidate: Candidate }) {
           <>
             <p className="review-done">
               <CheckCheck size={17} />
-              Undangan terkirim. Menunggu pelamar memilih jadwal.
+              Link jadwal sudah dibuat. Menunggu pelamar memilih slot.
             </p>
-            {candidate.invitedAt && (
-              <p className="job-panel-intro">
-                Diundang {formatDateTime(candidate.invitedAt)}.{" "}
-                {candidate.reminderSentAt
-                  ? `Pengingat terkirim ${formatDateTime(candidate.reminderSentAt)}.`
-                  : "Pengingat otomatis dikirim jika belum memilih dalam 48 jam."}
-              </p>
+            {job && (
+              <Link
+                className="button secondary review-action"
+                href={`/dashboard/jobs/${job.id}/approval`}
+              >
+                Salin atau kirim ulang link
+                <ArrowRight size={15} />
+              </Link>
             )}
           </>
         )}
@@ -170,17 +163,82 @@ function DecisionPanel({ candidate }: { candidate: Candidate }) {
   );
 }
 
+const STEPS_SHOWN = 6;
+
+const LINK_STATE: Record<string, string> = {
+  observed: "Terbuka",
+  manual: "Cek manual",
+  not_found: "Tidak ditemukan",
+  unreachable: "Tidak bisa dibuka",
+};
+
+// Buka CV di tab baru (endpoint download butuh cookie HR, jadi lewat blob).
+async function openDocument(id: string) {
+  const tab = window.open("", "_blank");
+  const res = await fetch(`/api/v1/documents/${id}/download`, {
+    credentials: "same-origin",
+  });
+  if (!res.ok || !tab) {
+    tab?.close();
+    alert("CV tidak bisa dibuka. Coba muat ulang halaman.");
+    return;
+  }
+  tab.location.href = URL.createObjectURL(await res.blob());
+}
+
+function AgentSteps({ steps }: { steps: AgentStep[] }) {
+  const [all, setAll] = useState(false);
+  // Langkah terbaru di atas; sisanya disembunyikan supaya panel tidak memanjang.
+  const ordered = [...steps].reverse();
+  const shown = all ? ordered : ordered.slice(0, STEPS_SHOWN);
+  return (
+    <>
+      <ol className="review-steps">
+        {shown.map((item, index) => {
+          const Icon = STEP_ICON[item.state];
+          return (
+            <li key={index} className={item.state}>
+              <span>
+                <Icon size={12} />
+              </span>
+              <div>
+                <strong>{item.label}</strong>
+                <code>{item.tool}</code>
+                <p>{item.result}</p>
+                {STEP_NOTE[item.state] && (
+                  <small>{STEP_NOTE[item.state]}</small>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      {ordered.length > STEPS_SHOWN && (
+        <button
+          type="button"
+          className="text-button"
+          onClick={() => setAll(!all)}
+        >
+          {all
+            ? "Tampilkan lebih sedikit"
+            : `Lihat semua ${ordered.length} langkah`}
+        </button>
+      )}
+    </>
+  );
+}
+
 export function CandidateDetail({ id }: { id: string }) {
   const { candidates } = useDashboard();
   const candidate = candidates.find((item) => item.id === id);
   if (!candidate) return null;
 
-  const counts = (["verified", "claimed", "contradicted", "unknown"] as const).map(
-    (status) => ({
-      status,
-      count: candidate.skills.filter((skill) => skill.status === status).length,
-    }),
-  );
+  const counts = (
+    ["verified", "claimed", "contradicted", "unknown"] as const
+  ).map((status) => ({
+    status,
+    count: candidate.skills.filter((skill) => skill.status === status).length,
+  }));
 
   return (
     <>
@@ -301,16 +359,26 @@ export function CandidateDetail({ id }: { id: string }) {
           <section className="panel job-panel">
             <h2>
               <MessageCircleQuestion size={15} />
-              Pertanyaan untuk interview
+              Usulan pertanyaan interview
             </h2>
-            <ol className="review-questions">
-              {candidate.questions.map((item) => (
-                <li key={item.question}>
-                  <p>{item.question}</p>
-                  <small>Menyasar: {item.reason}</small>
-                </li>
-              ))}
-            </ol>
+            <p className="job-panel-intro">
+              Saran dari agent berdasarkan bukti yang paling lemah. Pakai, ubah,
+              atau abaikan sesuai kebutuhanmu.
+            </p>
+            {candidate.questions.length ? (
+              <ol className="review-questions">
+                {candidate.questions.map((item) => (
+                  <li key={item.question}>
+                    <p>{item.question}</p>
+                    <small>Menyasar: {item.reason}</small>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="job-panel-intro">
+                Muncul setelah analisis selesai.
+              </p>
+            )}
           </section>
 
           <section className="panel job-panel">
@@ -324,8 +392,8 @@ export function CandidateDetail({ id }: { id: string }) {
               siapa pelamarnya.
             </p>
             <h3>Cuplikan CV yang dinilai agent</h3>
-            {candidate.cvExcerpt ? (
-              <CvExcerpt text={candidate.cvExcerpt} />
+            {candidate.cvExcerpt.length ? (
+              <CvExcerpt lines={candidate.cvExcerpt} />
             ) : (
               <p className="job-panel-intro">Belum ada bukti yang dibaca.</p>
             )}
@@ -374,31 +442,102 @@ export function CandidateDetail({ id }: { id: string }) {
             </dl>
           </section>
 
+          {candidate.links.length > 0 && (
+            <section className="panel job-panel">
+              <h2>
+                <Link2 size={15} />
+                Cek link oleh agent
+              </h2>
+              <p className="job-panel-intro">
+                Agent membuka link dari CV lewat API resmi. Hanya bahan untuk
+                HR, tidak memengaruhi skor.
+              </p>
+              <ul className="link-checks">
+                {candidate.links.map((link) => (
+                  <li key={link.url}>
+                    <div className="link-check-top">
+                      <a
+                        href={link.url}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                      >
+                        {link.url.replace(/^https:\/\/(www\.)?/, "")}
+                      </a>
+                      <span className={`link-state ${link.state}`}>
+                        {LINK_STATE[link.state] ?? link.state}
+                      </span>
+                    </div>
+                    {link.publicRepos !== null && (
+                      <p>
+                        {link.title && <strong>{link.title} · </strong>}
+                        {link.publicRepos} repo publik
+                        {link.topLanguages && ` · Bahasa: ${link.topLanguages}`}
+                        {link.lastActivity &&
+                          ` · Aktif terakhir ${formatDate(link.lastActivity)}`}
+                      </p>
+                    )}
+                    {link.publicRepos === null && link.title && (
+                      <p>{link.title}</p>
+                    )}
+                    {link.repos.length > 0 && (
+                      <ul className="link-repos">
+                        {link.repos.slice(0, 4).map((repo) => (
+                          <li key={repo.name}>
+                            <code>{repo.name}</code>
+                            {repo.language && <span>{repo.language}</span>}
+                            {repo.description && (
+                              <small>{repo.description}</small>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          <section className="panel job-panel">
+            <h2>
+              <FileText size={15} />
+              CV &amp; jawaban pelamar
+            </h2>
+            {candidate.documents.length ? (
+              <div className="skill-tags">
+                {candidate.documents.map((doc) => (
+                  <button
+                    key={doc.id}
+                    type="button"
+                    className="button secondary"
+                    onClick={() => openDocument(doc.id)}
+                  >
+                    <FileText size={14} />
+                    Lihat {doc.name}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="job-panel-intro">Tidak ada dokumen.</p>
+            )}
+            {Object.keys(candidate.answers).length > 0 && (
+              <dl className="review-data">
+                {Object.entries(candidate.answers).map(([question, answer]) => (
+                  <div key={question}>
+                    <dt>{question}</dt>
+                    <dd>{answer}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </section>
+
           <section className="panel job-panel">
             <h2>
               <Wrench size={15} />
               Langkah agent
             </h2>
-            <ol className="review-steps">
-              {candidate.pipeline.map((item, index) => {
-                const Icon = STEP_ICON[item.state];
-                return (
-                  <li key={index} className={item.state}>
-                    <span>
-                      <Icon size={12} />
-                    </span>
-                    <div>
-                      <strong>{item.label}</strong>
-                      <code>{item.tool}</code>
-                      <p>{item.result}</p>
-                      {STEP_NOTE[item.state] && (
-                        <small>{STEP_NOTE[item.state]}</small>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
+            <AgentSteps steps={candidate.pipeline} />
           </section>
         </div>
       </div>

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { Funnel } from "lucide-react";
+import { LogoMark } from "../brand-logo";
 import { safeNext, type Me } from "@/lib/session";
 import { serverGet } from "@/lib/server-api";
 import { LoginForm } from "./login-form";
@@ -27,7 +27,7 @@ export default async function LoginPage({
         <header className="public-topbar">
           <span className="public-brand">
             <span className="brand-mark">
-              <Funnel size={20} strokeWidth={2} />
+              <LogoMark size={19} />
             </span>
             saring<span className="brand-dot">.</span>
           </span>

@@ -28,7 +28,9 @@ export function IndicatorGroup({
     const root = ref.current;
     if (!root) return;
     const measure = () => {
-      const el = root.querySelector<HTMLElement>(':scope > [data-active="true"]');
+      const el = root.querySelector<HTMLElement>(
+        ':scope > [data-active="true"]',
+      );
       setBox(
         el
           ? {

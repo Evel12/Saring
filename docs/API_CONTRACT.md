@@ -1,6 +1,6 @@
 # Saring backend contract · v1
 
-Base URL: `http://127.0.0.1:8000/api/v1`. Vite proxies `/api` from port 5173. OpenAPI/Swagger: `/openapi.json` and `/docs`. All examples contain placeholder values. JSON requests reject unknown fields. IDs are opaque UUID strings; timestamps are UTC Unix seconds. No caller supplies `org_id`, actor IDs, verification flags, session IDs or provider secrets in resource bodies.
+Base URL: `http://127.0.0.1:8000/api/v1`. The Next.js frontend proxies `/api` from port 5173 (see `next.config.ts`). OpenAPI/Swagger: `/openapi.json` and `/docs`. All examples contain placeholder values. JSON requests reject unknown fields. IDs are opaque UUID strings; timestamps are UTC Unix seconds. No caller supplies `org_id`, actor IDs, verification flags, session IDs or provider secrets in resource bodies.
 
 ## Authentication and CSRF
 

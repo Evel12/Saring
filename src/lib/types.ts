@@ -104,7 +104,14 @@ export type Evidence = {
 };
 export type FindingState = "supported" | "partial" | "unknown" | "conflicting";
 export type Revision = {
-  provenance?: { provider?: string; model?: string; prompt_version?: string; extraction_version_ids?: string[]; citation_validation?: string; association_mode?: string };
+  provenance?: {
+    provider?: string;
+    model?: string;
+    prompt_version?: string;
+    extraction_version_ids?: string[];
+    citation_validation?: string;
+    association_mode?: string;
+  };
   id: string;
   finding_id: string;
   revision: number;
@@ -195,6 +202,8 @@ export type Activity = {
     cited?: number;
     without_citations?: number;
     skipped?: number;
+    evidence?: number;
+    documents?: number;
   };
   application_id: string | null;
   vacancy_id: string | null;
@@ -235,7 +244,20 @@ export type Permissions = {
   followup: boolean;
 };
 export type Snapshot = {
-  extractions: { id: string; document_id: string; version: number; engine: string; limitations: string; passages: {page: number | null; paragraph: number | null; method?: string; quality?: string; ocr_confidence?: number | null}[] }[];
+  extractions: {
+    id: string;
+    document_id: string;
+    version: number;
+    engine: string;
+    limitations: string;
+    passages: {
+      page: number | null;
+      paragraph: number | null;
+      method?: string;
+      quality?: string;
+      ocr_confidence?: number | null;
+    }[];
+  }[];
   application: Application;
   candidate?: Candidate;
   brief: Brief;

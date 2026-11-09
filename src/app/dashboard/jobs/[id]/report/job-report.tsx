@@ -8,7 +8,12 @@ import { SKILL_LABEL } from "../../../candidates/[id]/candidate-detail";
 import { useDashboard } from "../../../dashboard-context";
 import { PageHeading } from "../../../dashboard-ui";
 
-const SKILL_ORDER: SkillStatus[] = ["verified", "claimed", "contradicted", "unknown"];
+const SKILL_ORDER: SkillStatus[] = [
+  "verified",
+  "claimed",
+  "contradicted",
+  "unknown",
+];
 
 export function JobReport({
   jobId,
@@ -24,7 +29,7 @@ export function JobReport({
   filledSlots: number;
 }) {
   const { candidates } = useDashboard();
-  const applicants = candidates.filter((c) => c.role === title);
+  const applicants = candidates.filter((c) => c.jobId === jobId);
   const passed = applicants.filter((c) =>
     ["Shortlist", "Diundang", "Interview"].includes(c.status),
   );
@@ -40,7 +45,10 @@ export function JobReport({
 
   const funnel = [
     { label: "Melamar", value: applicants.length },
-    { label: "Dinilai agent", value: applicants.length },
+    {
+      label: "Dinilai agent",
+      value: applicants.filter((c) => c.analyzed).length,
+    },
     { label: "Lolos tinjauan", value: passed.length },
     { label: "Diundang", value: invited.length },
     { label: "Memilih jadwal", value: interviewed.length },
@@ -55,9 +63,9 @@ export function JobReport({
   const steps = applicants.flatMap((c) => c.pipeline);
   const agentFacts = [
     {
-      label: "Data sensitif disembunyikan",
-      value: applicants.reduce((sum, c) => sum + c.hiddenFields.length, 0),
-      unit: "field",
+      label: "Langkah agent tercatat",
+      value: steps.filter((s) => s.actor !== "hr").length,
+      unit: "langkah",
     },
     {
       label: "Kegagalan dipulihkan otomatis",
@@ -93,14 +101,26 @@ export function JobReport({
 
       <section className="stats-panel" aria-label="Angka utama">
         {[
-          { label: "Pelamar", value: applicants.length, note: "Masuk lewat link lamaran" },
-          { label: "Lolos tinjauan", value: passed.length, note: "Shortlist sampai interview" },
+          {
+            label: "Pelamar",
+            value: applicants.length,
+            note: "Masuk lewat link lamaran",
+          },
+          {
+            label: "Lolos tinjauan",
+            value: passed.length,
+            note: "Shortlist sampai interview",
+          },
           {
             label: "Slot interview terisi",
             value: filledSlots,
             note: `Dari ${slots} slot`,
           },
-          { label: "Rata-rata skor", value: average, note: "Skala 0 sampai 100" },
+          {
+            label: "Rata-rata kecocokan",
+            value: average,
+            note: "% kriteria yang punya bukti",
+          },
         ].map((item) => (
           <div className="stat" key={item.label}>
             <div>
@@ -128,7 +148,10 @@ export function JobReport({
             </p>
             <ul className="report-funnel">
               {funnel.map((item) => (
-                <li key={item.label} title={`${item.label}: ${item.value} pelamar`}>
+                <li
+                  key={item.label}
+                  title={`${item.label}: ${item.value} pelamar`}
+                >
                   <span className="report-funnel-label">{item.label}</span>
                   <span className="report-funnel-track">
                     <i style={{ width: `${(item.value / max) * 100}%` }} />
@@ -142,12 +165,16 @@ export function JobReport({
           <section className="panel job-panel">
             <h2>Verifikasi skill</h2>
             <p className="job-panel-intro">
-              {skills.length} klaim skill dari semua pelamar, dicek dari link yang
-              mereka berikan.
+              {skills.length} klaim skill dari semua pelamar, dicek dari link
+              yang mereka berikan.
             </p>
-            <div className="report-stack" role="img" aria-label={skillCounts
-              .map((s) => `${SKILL_LABEL[s.status]} ${s.count}`)
-              .join(", ")}>
+            <div
+              className="report-stack"
+              role="img"
+              aria-label={skillCounts
+                .map((s) => `${SKILL_LABEL[s.status]} ${s.count}`)
+                .join(", ")}
+            >
               {skillCounts
                 .filter((s) => s.count)
                 .map((s) => (
@@ -208,7 +235,10 @@ export function JobReport({
                         </td>
                         <td>{c.score}</td>
                         <td>
-                          {c.skills.filter((s) => s.status === "verified").length}{" "}
+                          {
+                            c.skills.filter((s) => s.status === "verified")
+                              .length
+                          }{" "}
                           dari {c.skills.length}
                         </td>
                         <td>

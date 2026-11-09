@@ -2,11 +2,7 @@
 
 import Link from "next/link";
 import { BellRing, CalendarDays, Clock, Video } from "lucide-react";
-import {
-  formatDate,
-  formatDateTime,
-  formatTimeRange,
-} from "@/lib/applicant-demo";
+import { formatDate, formatDateTime, formatTimeRange } from "@/lib/schedule";
 import type { Interview } from "@/lib/candidates";
 import { Avatar } from "../candidate-table";
 import { useDashboard } from "../dashboard-context";
@@ -82,8 +78,8 @@ export default function SchedulePage() {
             Menunggu pilih jadwal
           </h2>
           <p className="job-panel-intro">
-            Pelamar sudah menerima link jadwal pribadi. Kirim ulang linknya
-            dari halaman persetujuan kalau mereka belum memilih.
+            Pelamar sudah menerima link jadwal pribadi. Kirim ulang linknya dari
+            halaman persetujuan kalau mereka belum memilih.
           </p>
           {waiting.length ? (
             <ul className="schedule-waiting">

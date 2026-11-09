@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Funnel } from "lucide-react";
+import { LogoMark } from "../brand-logo";
 import "./public.css";
 
 export default function PublicLayout({
@@ -11,7 +11,7 @@ export default function PublicLayout({
         <header className="public-topbar">
           <span className="public-brand">
             <span className="brand-mark">
-              <Funnel size={20} strokeWidth={2} />
+              <LogoMark size={19} />
             </span>
             saring<span className="brand-dot">.</span>
           </span>
@@ -27,7 +27,7 @@ export default function PublicLayout({
             <span className="public-footer-links">
               <Link href="/privacy">Kebijakan privasi</Link>
               <i />
-              Prototipe · Data belum dikirim ke server
+              AI membantu, HR yang memutuskan
             </span>
           </footer>
         </main>

@@ -1,6 +1,6 @@
 # Architecture and execution contracts
 
-Saring runs as a React/Vite client, FastAPI API, durable Python worker, relational database and private file directory. Browser requests use same-origin HttpOnly sessions and CSRF tokens. The browser polls persisted events; browser timers never advance workflow state. SQLite supports CMD development. PostgreSQL and shared private storage are the intended multi-process deployment components; that runtime has not been integration-tested here.
+Saring runs as a Next.js (React) client, FastAPI API, durable Python worker, relational database and private file directory. Browser requests use same-origin HttpOnly sessions and CSRF tokens. The browser polls persisted events; browser timers never advance workflow state. SQLite supports CMD development. PostgreSQL and shared private storage are the intended multi-process deployment components; that runtime has not been integration-tested here.
 
 ```mermaid
 flowchart LR
@@ -40,4 +40,4 @@ External text and CV content are untrusted data. Embedded instructions cannot ch
 
 Every organization runs in live mode and every feature requires its real configuration: a model for analysis and suggestions, selected through the admin-only AI model setting (an OpenAI-compatible API with `OPENAI_API_KEY`, or a keyless local Ollama) or the `OPENAI_*` environment fallback, Resend for candidate email, and Google OAuth plus `TOKEN_ENCRYPTION_KEY` for interview coordination. Anything unconfigured returns truthful not-configured/failed states rather than a substitute result.
 
-Details and request schemas: [API contract](../API_CONTRACT.md). Deployment steps and operational limits: [DEPLOYMENT.md](DEPLOYMENT.md).
+Details and request schemas: [API contract](API_CONTRACT.md). Deployment steps and operational limits: [DEPLOYMENT.md](DEPLOYMENT.md).

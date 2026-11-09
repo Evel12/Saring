@@ -49,13 +49,31 @@ button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
+/* Fokus abu-abu sesuai tema, dengan transisi halus (bukan cincin biru). */
 button:focus-visible,
-a:focus-visible,
+a:focus-visible {
+  outline: 2px solid #9a9aa5;
+  outline-offset: 3px;
+}
+input,
+select,
+textarea {
+  transition:
+    border-color 0.2s var(--ease),
+    box-shadow 0.25s var(--ease);
+}
 input:focus-visible,
 select:focus-visible,
-textarea:focus-visible {
-  outline: 3px solid #93b5ff;
-  outline-offset: 3px;
+textarea:focus-visible,
+.input-search:focus-within {
+  border-color: #9a9aa5;
+  box-shadow: 0 0 0 4px #2020241a;
+  outline: none;
+}
+.input-search {
+  transition:
+    border-color 0.2s var(--ease),
+    box-shadow 0.25s var(--ease);
 }
 a {
   color: inherit;
@@ -152,18 +170,11 @@ svg {
   display: grid;
   place-items: center;
   color: #fff;
-  background: linear-gradient(
-    155deg,
-    #9aaeff,
-    #657bf9 35%,
-    #444bea 78%,
-    #4740de
-  );
-  border: 1px solid #7378eb;
+  background: linear-gradient(180deg, #3a3a43, #18181c);
+  border: 1px solid #101013;
   box-shadow:
-    inset 0 2px 2px #ffffff99,
-    inset 0 -2px 2px #2026b84d,
-    0 2px 4px #4e50cd26;
+    inset 0 1px 0 #ffffff2e,
+    0 2px 6px #18181c26;
 }
 .brand-mark svg {
   width: 20px;
@@ -1388,7 +1399,9 @@ textarea {
   background: linear-gradient(#fdfdfe, #fff);
   color: #5e5e6f;
   font-size: 12px;
-  transition: border-color 0.2s;
+  transition:
+    border-color 0.2s var(--ease),
+    box-shadow 0.25s var(--ease);
   box-shadow:
     inset 0 1px 2px #27273103,
     0 1px 1px #fff;
@@ -1646,8 +1659,9 @@ dialog[open] {
   cursor: pointer;
 }
 .upload-zone:focus-within {
-  outline: 3px solid #93b5ff;
-  outline-offset: 3px;
+  border-color: #9a9aa5;
+  box-shadow: 0 0 0 4px #2020241a;
+  outline: none;
 }
 .selected-file {
   display: flex;

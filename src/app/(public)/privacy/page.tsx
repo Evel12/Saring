@@ -8,24 +8,24 @@ const sections = [
   {
     title: "Data yang kami proses",
     items: [
-      "Nama, email, file CV, dan link GitHub atau portofolio yang kamu isi di form.",
-      "Waktu kamu memberi persetujuan dan jadwal interview yang kamu pilih.",
+      "Nama, email, file CV, jawaban pertanyaan lamaran, dan link portofolio yang kamu isi.",
+      "Jadwal interview yang kamu pilih, jika kamu diundang.",
     ],
   },
   {
     title: "Cara data dipakai",
     items: [
-      "CV dibaca oleh AI agent untuk menilai kecocokan skill dan pengalamanmu dengan lowongan.",
-      "Foto, agama, tanggal lahir atau usia, status pernikahan, dan jenis kelamin disembunyikan sebelum penilaian.",
-      "Hasil penilaian ditinjau oleh tim HR. Email hanya dikirim setelah disetujui tim HR.",
+      "CV dibaca oleh AI agent untuk mencari bukti skill dan pengalaman yang diminta lowongan.",
+      "Sebelum dikirim ke penyedia model AI, nama, kontak, alamat, foto, agama, tanggal lahir, status pernikahan, dan jenis kelamin disaring.",
+      "AI tidak pernah menolak atau memilih pelamar. Semua keputusan diambil oleh tim HR.",
     ],
   },
   {
     title: "Pemeriksaan link",
     items: [
-      "Kami hanya memeriksa link yang kamu berikan sendiri.",
-      "Kami tidak mencari informasi tentangmu di internet.",
-      "Link yang kosong atau bermasalah tidak mengurangi nilaimu.",
+      "Agent hanya membuka link yang tertulis di CV atau form-mu, misalnya profil GitHub lewat API resminya.",
+      "Kami tidak mencari informasi tentangmu di internet dan tidak mengambil isi LinkedIn.",
+      "Hasil pemeriksaan link tidak memengaruhi nilaimu.",
     ],
   },
   {

@@ -36,7 +36,9 @@ export function draftError(draft: InvitationDraft) {
 }
 
 export const scheduleUrl = (c: Pick<Candidate, "id" | "scheduleToken">) =>
-  c.scheduleToken ? `${window.location.origin}/schedule/${c.id}.${c.scheduleToken}` : "";
+  c.scheduleToken
+    ? `${window.location.origin}/schedule/${c.id}.${c.scheduleToken}`
+    : "";
 
 /** Membuat link jadwal pribadi (butuh status shortlist di backend). */
 export async function sendInvitation(candidate: Candidate) {
@@ -49,6 +51,9 @@ export async function sendInvitation(candidate: Candidate) {
 }
 
 export function mailtoFor(candidate: Candidate, draft: InvitationDraft) {
-  const body = draft.body.replace(SCHEDULE_LINK_PLACEHOLDER, scheduleUrl(candidate));
+  const body = draft.body.replace(
+    SCHEDULE_LINK_PLACEHOLDER,
+    scheduleUrl(candidate),
+  );
   return `mailto:${encodeURIComponent(candidate.email)}?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(body)}`;
 }

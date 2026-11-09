@@ -3,6 +3,8 @@ const API = process.env.API_URL ?? "http://127.0.0.1:8000";
 
 export type ApplyJob = {
   slug: string;
+  /** HR menutup/menghapus lowongan: link masih sah tapi tidak menerima lamaran. */
+  closed: boolean;
   title: string;
   company: string;
   description: string;
@@ -27,10 +29,27 @@ export async function getApplyJob(slug: string): Promise<ApplyJob | null> {
     cache: "no-store",
   });
   if (res.status === 404) return null;
+  if (res.status === 410) {
+    const { detail } = await res.json();
+    return {
+      slug,
+      closed: true,
+      title: detail.title,
+      company: detail.company,
+      description: "",
+      questions: [],
+      department: "",
+      type: "",
+      location: "",
+      requiredSkills: [],
+      niceToHaveSkills: [],
+    };
+  }
   if (!res.ok) throw new Error(`Backend ${res.status} on apply view`);
   const v = await res.json();
   return {
     slug,
+    closed: false,
     title: v.title,
     company: v.company,
     description: v.description,

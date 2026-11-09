@@ -94,19 +94,25 @@ export function CandidateTable({
         (filter === "Semua kandidat" || c.status === filter) &&
         (!roleFilter || c.role === roleFilter),
     )
-    .sort((a, b) => (sortHigh ? b.score - a.score : a.appliedAt.localeCompare(b.appliedAt)));
+    .sort((a, b) =>
+      sortHigh ? b.score - a.score : a.appliedAt.localeCompare(b.appliedAt),
+    );
 
   function exportCandidates() {
     const data = [
       "Nama,Posisi,Skor,Status",
-      ...filtered.map((c) => `${c.name},${c.role},${c.score},${c.status}`),
+      ...filtered.map((c) =>
+        [c.name, c.role, c.score, c.status]
+          .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+          .join(","),
+      ),
     ].join("\n");
     const url = URL.createObjectURL(
       new Blob(["﻿" + data], { type: "text/csv;charset=utf-8;" }),
     );
     const a = document.createElement("a");
     a.href = url;
-    a.download = "saring-kandidat-demo.csv";
+    a.download = "saring-kandidat.csv";
     a.click();
     URL.revokeObjectURL(url);
     setToast("Daftar kandidat berhasil diekspor.");
@@ -127,7 +133,7 @@ export function CandidateTable({
           <h3>Belum ada pelamar</h3>
           <p>
             Bagikan link lamaran. Pelamar yang masuk akan muncul di sini beserta
-            skor dan alasannya.
+            analisis agent.
           </p>
         </div>
       </section>
@@ -225,7 +231,9 @@ export function CandidateTable({
               <th>Posisi dilamar</th>
               <th>
                 Kecocokan{" "}
-                <span title="Skor contoh berdasarkan rubrik posisi">ⓘ</span>
+                <span title="Persentase kriteria lowongan yang punya bukti di CV">
+                  ⓘ
+                </span>
               </th>
               <th>Status</th>
               <th>
@@ -249,7 +257,9 @@ export function CandidateTable({
                     <span>
                       <strong>{c.name}</strong>
                       <small>
-                        {full && c.experience ? `${c.experience} pengalaman` : c.role}
+                        {full && c.experience
+                          ? `${c.experience} pengalaman`
+                          : c.role}
                       </small>
                     </span>
                   </Link>
@@ -303,10 +313,6 @@ export function CandidateTable({
         <span>
           Menampilkan {Math.min(filtered.length, full ? 100 : 5)} dari{" "}
           {filtered.length} kandidat
-        </span>
-        <span className="sample-note">
-          <i />
-          Data contoh
         </span>
       </div>
     </section>

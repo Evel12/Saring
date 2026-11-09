@@ -39,7 +39,8 @@ export function CopyLink({ url }: { url: string }) {
         </button>
       </div>
       <span className="job-field-hint" aria-live="polite">
-        {status === "manual" && "Browser menolak menyalin. Tekan Ctrl+C untuk menyalin link yang sudah terpilih."}
+        {status === "manual" &&
+          "Browser menolak menyalin. Tekan Ctrl+C untuk menyalin link yang sudah terpilih."}
       </span>
     </div>
   );

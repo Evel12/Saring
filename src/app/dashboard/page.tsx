@@ -10,7 +10,7 @@ import {
   ShieldCheck,
   Users,
 } from "lucide-react";
-import { formatDayMonth } from "@/lib/applicant-demo";
+import { formatDayMonth } from "@/lib/schedule";
 import { buildLog } from "@/lib/agent-log";
 import { CandidateTable } from "./candidate-table";
 import { useDashboard } from "./dashboard-context";
@@ -27,7 +27,8 @@ const REVIEW_HREF = "/dashboard/candidates?status=Perlu+ditinjau";
 const pad = (value: number) => value.toString().padStart(2, "0");
 
 export default function OverviewPage() {
-  const { openJobs, candidates, interviews, pending, hrEvents } = useDashboard();
+  const { openJobs, candidates, interviews, pending, hrEvents } =
+    useDashboard();
   const upcoming = upcomingInterviews(interviews);
   const recent = buildLog(candidates, hrEvents).slice(0, 4);
   const stats = [

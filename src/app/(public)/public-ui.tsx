@@ -25,12 +25,12 @@ export function PublicMessage({
 const nextSteps = [
   [
     "CV dibaca dan dinilai",
-    "Saring menyembunyikan data seperti foto, agama, dan usia sebelum menilai kecocokanmu.",
+    "Data pribadi seperti nama, kontak, foto, dan agama disaring sebelum CV dibaca AI.",
   ],
   ["Tim HR meninjau", "Keputusan tetap di tangan tim HR, bukan di tangan AI."],
   [
     "Pilih jadwal interview",
-    "Kalau lolos, kamu menerima email berisi link untuk memilih jadwal.",
+    "Kalau lolos, tim HR mengirim link pribadi untuk memilih jadwal.",
   ],
 ];
 
