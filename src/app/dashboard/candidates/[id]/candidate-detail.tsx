@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { post } from "@/lib/api";
 import {
   AlertTriangle,
   ArrowRight,
@@ -22,6 +24,8 @@ import {
   SHORTLIST_RULE,
   type AgentStep,
   type Candidate,
+  type SkillCheck,
+  type ExcerptLine,
   type SkillStatus,
 } from "@/lib/candidates";
 import { Avatar, Status } from "../../candidate-table";
@@ -46,11 +50,38 @@ const STEP_NOTE: Record<AgentStep["state"], string> = {
   flagged: "Diteruskan ke HR",
 };
 
-function CvExcerpt({ lines }: { lines: string[] }) {
+// Tebalkan nama skill lowongan di dalam kalimat CV supaya HR langsung melihat kaitannya.
+function Highlight({ text, words }: { text: string; words: string[] }) {
+  const escaped = words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  if (!escaped.length) return <>{text}</>;
+  const parts = text.split(new RegExp(`(${escaped.join("|")})`, "gi"));
+  return (
+    <>
+      {parts.map((part, i) =>
+        words.some((w) => w.toLowerCase() === part.toLowerCase()) ? (
+          <mark key={i}>{part}</mark>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
+
+function CvExcerpt({ lines }: { lines: ExcerptLine[] }) {
   return (
     <ul className="review-excerpt">
       {lines.map((line, index) => (
-        <li key={index}>{line}</li>
+        <li key={index}>
+          <span>
+            <Highlight text={line.text} words={line.skills} />
+          </span>
+          <span className="excerpt-tags">
+            {line.skills.map((skill) => (
+              <em key={skill}>{skill}</em>
+            ))}
+          </span>
+        </li>
       ))}
     </ul>
   );
@@ -164,6 +195,50 @@ function DecisionPanel({ candidate }: { candidate: Candidate }) {
 }
 
 const STEPS_SHOWN = 6;
+
+// Status "Terbukti" tidak pernah diberikan AI; HR yang mengonfirmasi bukti yang dikutip agent.
+function ConfirmSkill({
+  candidateId,
+  skill,
+}: {
+  candidateId: string;
+  skill: SkillCheck;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  if (
+    skill.status !== "claimed" ||
+    !skill.requirementId ||
+    !skill.evidenceIds?.length
+  )
+    return null;
+  async function confirm() {
+    setBusy(true);
+    try {
+      await post(`/applications/${candidateId}/findings`, {
+        requirement_id: skill.requirementId,
+        state: "supported",
+        evidence_ids: skill.evidenceIds,
+        explanation: "Dikonfirmasi HR setelah memeriksa bukti di CV.",
+      });
+      router.refresh();
+    } catch (err) {
+      alert(`Gagal mengonfirmasi: ${(err as Error).message}`);
+      setBusy(false);
+    }
+  }
+  return (
+    <button
+      type="button"
+      className="text-button skill-confirm"
+      onClick={confirm}
+      disabled={busy}
+    >
+      <Check size={13} />
+      {busy ? "Menyimpan…" : "Konfirmasi terbukti"}
+    </button>
+  );
+}
 
 const LINK_STATE: Record<string, string> = {
   observed: "Terbuka",
@@ -343,6 +418,13 @@ export function CandidateDetail({ id }: { id: string }) {
                   <div>
                     <strong>{skill.name}</strong>
                     <p>{skill.evidence}</p>
+                    <ConfirmSkill candidateId={candidate.id} skill={skill} />
+                    {skill.quotes.map((quote) => (
+                      <blockquote className="skill-quote" key={quote}>
+                        <FileText size={11} />
+                        <Highlight text={quote} words={[skill.name]} />
+                      </blockquote>
+                    ))}
                   </div>
                   <span className={`skill-status ${skill.status}`}>
                     {SKILL_LABEL[skill.status]}
@@ -391,11 +473,13 @@ export function CandidateDetail({ id }: { id: string }) {
               URL, dan data pribadi disaring dulu, jadi penilaian tidak melihat
               siapa pelamarnya.
             </p>
-            <h3>Cuplikan CV yang dinilai agent</h3>
+            <h3>Baris CV yang relevan dengan lowongan</h3>
             {candidate.cvExcerpt.length ? (
               <CvExcerpt lines={candidate.cvExcerpt} />
             ) : (
-              <p className="job-panel-intro">Belum ada bukti yang dibaca.</p>
+              <p className="job-panel-intro">
+                Belum ada baris CV yang terkait dengan skill lowongan ini.
+              </p>
             )}
           </section>
         </div>

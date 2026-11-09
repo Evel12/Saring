@@ -1,10 +1,13 @@
 """Server-level model selection for OpenAI-compatible providers, including Ollama.
 
-No secret is accepted from the browser or stored in the database: a row records
-provider, base URL and model only. Credentials stay in the server environment
-(OPENAI_API_KEY); Ollama requires no key. When no row is saved, the documented
-environment variables remain authoritative.
+A platform administrator picks provider, base URL and model, and may store an
+API key. The key is Fernet-encrypted at rest (key derived from SESSION_SECRET),
+write-only from the browser and never returned. Without a stored key the server
+environment (OPENAI_API_KEY) is used; Ollama requires no key. When no row is
+saved, the documented environment variables remain authoritative.
 """
+import base64
+import hashlib
 import os
 
 from backend.db import Session, now
@@ -22,6 +25,24 @@ def timeout():
         return float(os.getenv("AI_TIMEOUT_SECONDS", "300"))
     except ValueError:
         return 300.0
+
+
+def _fernet():
+    from cryptography.fernet import Fernet
+    secret = os.getenv("SESSION_SECRET", "")
+    return Fernet(base64.urlsafe_b64encode(hashlib.sha256(("ai-key:" + secret).encode()).digest()))
+
+
+def _stored_key():
+    from backend import models as m
+    with Session() as s:
+        row = s.get(m.AiModelConfig, "server")
+        if not row or not row.api_key_enc:
+            return ""
+        try:
+            return _fernet().decrypt(row.api_key_enc.encode()).decode()
+        except Exception:
+            return ""  # SESSION_SECRET changed: the stored key must be entered again
 
 
 def _row(s):
@@ -66,21 +87,26 @@ def config(s=None):
 
 def api_key(cfg):
     # Ollama requires no real key; the SDK still needs a non-empty credential.
-    return "ollama" if cfg["provider"] == "ollama" else os.getenv("OPENAI_API_KEY", "")
+    if cfg["provider"] == "ollama":
+        return "ollama"
+    stored = _stored_key() if cfg.get("source") == "server" else ""
+    return stored or os.getenv("OPENAI_API_KEY", "")
 
 
 def available(cfg):
     if not cfg:
         return False
-    return cfg["provider"] == "ollama" or bool(os.getenv("OPENAI_API_KEY"))
+    return cfg["provider"] == "ollama" or bool(api_key(cfg))
 
 
 def describe():
     cfg = config()
+    stored = bool(_stored_key())
+    present = stored or bool(os.getenv("OPENAI_API_KEY"))
     if not cfg:
         return {"provider": "none", "base_url": "", "model": "", "source": "unset",
-            "openai_key_present": bool(os.getenv("OPENAI_API_KEY"))}
-    return {**cfg, "openai_key_present": bool(os.getenv("OPENAI_API_KEY"))}
+            "openai_key_present": present, "api_key_stored": stored}
+    return {**cfg, "openai_key_present": present, "api_key_stored": stored}
 
 
 def list_models(cfg):
@@ -105,11 +131,12 @@ def check_base_url(value):
     return value
 
 
-def save(provider, model, base_url="", updated_by=""):
+def save(provider, model, base_url="", updated_by="", key=None):
     if provider not in DEFAULTS:
         raise ValueError("Provider must be openai or ollama")
-    if provider == "openai" and not os.getenv("OPENAI_API_KEY"):
-        raise ValueError("Set OPENAI_API_KEY in the server environment before selecting the OpenAI provider")
+    key = (key or "").strip()
+    if provider == "openai" and not (key or _stored_key() or os.getenv("OPENAI_API_KEY")):
+        raise ValueError("Isi API key provider, atau set OPENAI_API_KEY di server")
     model, base_url = model.strip(), check_base_url(base_url.strip())
     if not model or len(model) > 200 or any(item in model for item in "\r\n"):
         raise ValueError("Select one of the provider's model names")
@@ -120,6 +147,8 @@ def save(provider, model, base_url="", updated_by=""):
             row = m.AiModelConfig(context="server")
             s.add(row)
         row.provider, row.base_url, row.model = provider, base_url, model
+        if key:
+            row.api_key_enc = _fernet().encrypt(key.encode()).decode()
         row.updated_at = now()
         row.updated_by = updated_by
         s.commit()

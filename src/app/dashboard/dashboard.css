@@ -594,18 +594,6 @@
   border-radius: 50%;
   background: #b5b5be;
 }
-.review-excerpt mark {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 1px 7px;
-  border-radius: 6px;
-  background: #36363c;
-  color: #fff;
-  font-size: 10px;
-  line-height: 1.7;
-  white-space: nowrap;
-}
 .review-action {
   width: 100%;
   min-height: 42px;
@@ -1651,4 +1639,163 @@ nav.has-indicator .nav-item.active {
 .link-repos small {
   flex-basis: 100%;
   color: #8a8a95;
+}
+
+/* Baris CV relevan: kalimat di kiri, skill yang disentuh di kanan. */
+.review-excerpt li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.review-excerpt mark,
+.skill-quote mark {
+  padding: 0 2px;
+  border-radius: 4px;
+  background: #ececf1;
+  color: #202024;
+  font-weight: 600;
+}
+.excerpt-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+  max-width: 40%;
+}
+.excerpt-tags em {
+  padding: 1px 7px;
+  border: 1px solid #e0e0e7;
+  border-radius: 999px;
+  background: #fff;
+  color: #6b6b76;
+  font-size: 10.5px;
+  font-style: normal;
+  white-space: nowrap;
+}
+.skill-quote {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  margin: 6px 0 0;
+  padding: 6px 10px;
+  border-left: 2px solid #d6d6de;
+  border-radius: 0 8px 8px 0;
+  background: #fafafb;
+  color: #55555f;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.skill-quote svg {
+  flex-shrink: 0;
+  color: #a1a1ab;
+}
+@media (max-width: 640px) {
+  .review-excerpt li {
+    flex-direction: column;
+    gap: 4px;
+  }
+  .excerpt-tags {
+    max-width: none;
+    justify-content: flex-start;
+  }
+}
+
+.ai-settings {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+}
+.ai-settings label {
+  display: grid;
+  gap: 4px;
+  font-size: 11.5px;
+  color: #6b6b76;
+}
+.ai-settings .button {
+  justify-self: start;
+}
+
+/* Halaman tim */
+.team-table {
+  width: 100%;
+}
+.team-table td strong,
+.team-table td small {
+  display: block;
+}
+.team-table td small {
+  color: #8a8a95;
+  font-size: 11.5px;
+}
+.team-table td em {
+  font-style: normal;
+  color: #8a8a95;
+  font-weight: 400;
+}
+.team-table select {
+  min-height: 34px;
+  padding: 6px 10px;
+  max-width: 140px;
+}
+.team-table tr.inactive {
+  opacity: 0.55;
+}
+.team-invites {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+.team-invites li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.team-invites li > div {
+  flex: 1;
+}
+.team-invites strong,
+.team-invites small {
+  display: block;
+}
+.team-invites small {
+  color: #8a8a95;
+  font-size: 11.5px;
+}
+.team-form {
+  display: grid;
+  gap: 10px;
+}
+.team-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: #6b6b76;
+}
+.team-link {
+  margin-top: 14px;
+  font-size: 12px;
+}
+.candidate-filters .filter-select,
+.filter-select {
+  max-width: 220px;
+}
+.team-table {
+  margin-top: 12px;
+}
+.role-select {
+  max-width: 150px;
+}
+.role-select > button {
+  min-height: 34px;
+}
+.team-form {
+  margin-top: 14px;
+  gap: 14px;
+}
+.team-form label {
+  color: #4f4f59;
 }

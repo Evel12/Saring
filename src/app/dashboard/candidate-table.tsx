@@ -1,5 +1,6 @@
 "use client";
 
+import { Select } from "../ui-select";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -211,16 +212,16 @@ export function CandidateTable({
               onChange={(e) => setQuery(e.target.value)}
             />
           </label>
-          <select
+          <Select
+            className="filter-select"
             aria-label="Filter lowongan"
             value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
-          >
-            <option value="">Semua lowongan</option>
-            {jobs.map((j) => (
-              <option key={j.id}>{j.title}</option>
-            ))}
-          </select>
+            onChange={setRoleFilter}
+            options={[
+              { value: "", label: "Semua lowongan" },
+              ...jobs.map((j) => ({ value: j.title, label: j.title })),
+            ]}
+          />
         </div>
       )}
       <div className="table-scroll">
@@ -266,13 +267,17 @@ export function CandidateTable({
                 </td>
                 <td>{c.role}</td>
                 <td>
-                  <div className="score">
-                    <Sparkles size={13} />
-                    <strong>{c.score}%</strong>
-                    <span className="score-track">
-                      <i style={{ width: `${c.score}%` }} />
-                    </span>
-                  </div>
+                  {c.analyzed ? (
+                    <div className="score">
+                      <Sparkles size={13} />
+                      <strong>{c.score}%</strong>
+                      <span className="score-track">
+                        <i style={{ width: `${c.score}%` }} />
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="score-pending">Belum dianalisis</span>
+                  )}
                 </td>
                 <td>
                   <Status status={c.status} />

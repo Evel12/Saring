@@ -5,9 +5,18 @@ export type SkillStatus = "verified" | "claimed" | "contradicted" | "unknown";
 export type SkillCheck = {
   name: string;
   status: SkillStatus;
+  /** Penjelasan agent (bahasa Indonesia). */
   evidence: string;
+  /** Kalimat utuh dari CV yang dikutip agent sebagai bukti. */
+  quotes: string[];
   essential?: boolean;
+  /** Untuk konfirmasi HR: kriteria dan bukti yang dikutip agent. */
+  requirementId?: string;
+  evidenceIds?: string[];
 };
+
+/** Baris CV yang relevan dengan lowongan, beserta skill yang disentuhnya. */
+export type ExcerptLine = { text: string; skills: string[] };
 
 export type ScorePart = {
   label: string;
@@ -78,7 +87,7 @@ export type Candidate = {
   reviewReasons: string[];
   hiddenFields: string[];
   /** Baris CV yang dibaca agent, sudah dirapikan untuk ditampilkan. */
-  cvExcerpt: string[];
+  cvExcerpt: ExcerptLine[];
   pipeline: AgentStep[];
   questions: InterviewQuestion[];
   scheduleToken?: string | null;

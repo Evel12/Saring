@@ -39,6 +39,7 @@ class Organization(Row, Base):
     __tablename__ = "organizations"
     name: Mapped[str] = mapped_column(String(160))
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(20), default="active")  # active | suspended
 
 
 class User(Row, Base):
@@ -47,6 +48,7 @@ class User(Row, Base):
     display_name: Mapped[str] = mapped_column(String(160))
     password_hash: Mapped[str] = mapped_column(Text)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_platform_admin: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class Membership(Tenant, Base):
@@ -701,7 +703,24 @@ class AiModelConfig(Base):
     model: Mapped[str] = mapped_column(String(200), nullable=False, server_default="")
     updated_by: Mapped[str] = mapped_column(String(254), nullable=False, server_default="")
     updated_at: Mapped[float] = mapped_column(Float, default=now)
+    api_key_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     __table_args__ = (CheckConstraint("provider IN ('openai', 'ollama')", name="ck_ai_provider"),)
+
+
+class TeamInvitation(Tenant, Base):
+    """HR team invitation. Only the SHA-256 of the token is stored."""
+
+    __tablename__ = "team_invitations"
+    __table_args__ = scoped(CheckConstraint("role IN ('admin','recruiter')"))
+    email: Mapped[str] = mapped_column(String(254), index=True)
+    display_name: Mapped[str] = mapped_column(String(160))
+    role: Mapped[str] = mapped_column(String(20), default="recruiter")
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    invited_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    expires_at: Mapped[float] = mapped_column(Float)
+    accepted_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    accepted_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    revoked_at: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 APPEND_ONLY = (

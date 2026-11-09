@@ -133,6 +133,9 @@ def principal(request: Request, s=Depends(get_db)):
         )
         if not user or not user.active or not member:
             raise HTTPException(403, "Organization membership required")
+        org = s.get(m.Organization, org_id)
+        if not org or org.status != "active":
+            raise HTTPException(403, "Organization is suspended")
         return Principal(org_id, row.user_id, member.role, row.id)
     invitation = s.get(m.CandidateInvitation, row.invitation_id)
     if not invitation or invitation.revoked_at or invitation.expires_at <= now():
@@ -159,6 +162,14 @@ def recruiter(p=Depends(principal)):
 def admin(p=Depends(recruiter)):
     if p.role != "admin":
         raise HTTPException(403, "Administrator role required")
+    return p
+
+
+def platform_admin(p=Depends(principal), s=Depends(get_db)):
+    """Server-wide settings (e.g. the AI model) belong to the platform owner, not one tenant."""
+    user = s.get(m.User, p.user_id) if p.user_id else None
+    if not user or not user.is_platform_admin:
+        raise HTTPException(403, "Platform administrator required")
     return p
 
 

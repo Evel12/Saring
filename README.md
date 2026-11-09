@@ -37,6 +37,8 @@ Saring adalah agent yang bekerja sejak lamaran masuk sampai jadwal interview, se
 | 🔁 | **Pemulihan otomatis** | Panggilan AI yang gagal dicoba ulang dengan batas aman; CV berbahasa lain ditandai untuk dibaca manual. |
 | 💬 | **Usulan pertanyaan interview** | Agent menyusun pertanyaan dari skill yang buktinya paling lemah. |
 | 📅 | **Penjadwalan** | HR menyetujui shortlist, pelamar memilih sendiri slot interview yang masih kosong. |
+| 👥 | **Akun tim HR** | Admin perusahaan mengundang rekan lewat link; tiap orang membuat password sendiri. |
+| ⚙️ | **Pilih model AI** | Gemini, OpenAI, Groq, OpenRouter, atau Ollama; API key disimpan terenkripsi di server. |
 
 > AI tidak pernah menolak atau memilih pelamar secara otomatis. "Belum ada bukti" bukan berarti tidak mampu.
 
@@ -124,7 +126,8 @@ docs/               Dokumentasi backend, kontrak API, arsitektur, deployment
 ## Keamanan
 
 - Sesi HttpOnly + CSRF, password di-hash dengan Argon2, tanpa token di localStorage.
-- API key AI hanya disimpan di server, tidak pernah dikirim ke browser.
+- API key AI disimpan terenkripsi di server dan tidak pernah dikirim kembali ke browser; hanya platform admin yang bisa mengubah model.
+- Anggota tim bergabung lewat link undangan sekali pakai (disimpan sebagai hash, berlaku 7 hari); tidak ada yang mengetik password orang lain.
 - File CV disimpan privat dan hanya bisa diunduh HR di organisasi yang sama.
 
 Dokumentasi lengkap backend: [docs/BACKEND.md](docs/BACKEND.md) · Kontrak API: [docs/API_CONTRACT.md](docs/API_CONTRACT.md)

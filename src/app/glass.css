@@ -2633,3 +2633,178 @@ dialog[open] {
     scroll-behavior: auto !important;
   }
 }
+
+/* Dropdown kustom (ui-select.tsx): tampil sama di semua browser dan OS. */
+.ui-select {
+  position: relative;
+  width: 100%;
+}
+.ui-select > button {
+  width: 100%;
+  min-height: 41px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid #dcdce5;
+  border-radius: 11px;
+  background: linear-gradient(#fdfdfe, #fff);
+  color: #3b3b44;
+  font-size: 13px;
+  text-align: left;
+}
+.ui-select > button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-select > button svg {
+  flex-shrink: 0;
+  color: #8a8a95;
+  transition: transform 0.2s var(--ease);
+}
+.ui-select.open > button {
+  border-color: #9a9aa5;
+  box-shadow: 0 0 0 4px #2020241a;
+}
+.ui-select.open > button svg {
+  transform: rotate(180deg);
+}
+.ui-select > button:hover:not(:disabled) {
+  border-color: #c4c4cf;
+}
+.ui-select ul {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  min-width: 180px;
+  margin: 0;
+  padding: 5px;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #e4e4ea;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px #1a1a2214, 0 2px 6px #1a1a220d;
+  animation: select-pop 0.14s var(--ease);
+  max-height: 280px;
+  overflow: auto;
+}
+@keyframes select-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.ui-select li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: #3b3b44;
+  font-size: 13px;
+  cursor: pointer;
+}
+.ui-select li small {
+  display: block;
+  color: #8a8a95;
+  font-size: 11px;
+}
+.ui-select li.active {
+  background: #f2f2f5;
+}
+.ui-select li[aria-selected="true"] {
+  font-weight: 600;
+  color: #202024;
+}
+.ui-select li svg {
+  color: #202024;
+  flex-shrink: 0;
+}
+
+/* Menu akun (titik tiga) di sidebar */
+.user-menu-wrap {
+  position: relative;
+}
+.user-menu {
+  position: absolute;
+  z-index: 40;
+  right: 0;
+  bottom: calc(100% + 8px);
+  min-width: 170px;
+  padding: 5px;
+  background: #fff;
+  border: 1px solid #e4e4ea;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px #1a1a2214, 0 2px 6px #1a1a220d;
+  animation: select-pop 0.14s var(--ease);
+}
+.user-menu button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: #3b3b44;
+  text-align: left;
+}
+.user-menu button:hover {
+  background: #f2f2f5;
+}
+.user-menu button.danger {
+  color: #b4473d;
+}
+.user-menu button.danger:hover {
+  background: #fbefee;
+}
+
+/* Halaman publik & login: isi di tengah layar, footer selalu di bawah. */
+.public-shell .main-shell {
+  display: flex;
+  flex-direction: column;
+}
+.public-shell main {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.public-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 24px 0;
+}
+
+/* Jarak antar panel di kolom utama */
+.main-column > .job-panel + .job-panel {
+  margin-top: 18px;
+}
+
+/* Dropdown yang terbuka boleh keluar dari panel (panel biasanya memotong isinya). */
+.panel:has(.ui-select.open) {
+  overflow: visible;
+  position: relative;
+  z-index: 5;
+}
+/* Nama & peran di sidebar: satu baris, terpotong rapi. */
+.sidebar-user > div {
+  min-width: 0;
+}
+.sidebar-user strong,
+.sidebar-user small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.score-pending {
+  color: #a1a1ab;
+  font-size: 11.5px;
+}

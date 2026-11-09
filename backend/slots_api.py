@@ -2,12 +2,17 @@
 
 The applicant-facing slot picker lives in the same module once scheduling is wired.
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from backend import auth, models as m, schemas as d, services as svc
 from backend.db import get_db
 
 router = APIRouter(prefix="/api/v1")
+
+
+def _csrf(request: Request):
+    # Recruiter mutations need CSRF like the main API; the public slot picker does not.
+    auth.csrf(request)
 
 
 @router.get("/vacancies/{id}/slots")
@@ -21,7 +26,7 @@ def slots(id: str, p=Depends(auth.recruiter), s=Depends(get_db)):
     return {"items": [svc.public(x) for x in rows]}
 
 
-@router.post("/vacancies/{id}/slots", status_code=201)
+@router.post("/vacancies/{id}/slots", status_code=201, dependencies=[Depends(_csrf)])
 def add(id: str, body: d.SlotsInput, p=Depends(auth.recruiter), s=Depends(get_db)):
     v = svc.own(s, m.Vacancy, id, p)
     svc.add_slots(s, p, v, body.slots)
@@ -30,7 +35,7 @@ def add(id: str, body: d.SlotsInput, p=Depends(auth.recruiter), s=Depends(get_db
     return slots(id, p, s)
 
 
-@router.delete("/slots/{id}")
+@router.delete("/slots/{id}", dependencies=[Depends(_csrf)])
 def remove(id: str, p=Depends(auth.recruiter), s=Depends(get_db)):
     slot = svc.own(s, m.InterviewSlot, id, p)
     if slot.application_id:
@@ -48,7 +53,7 @@ from pydantic import BaseModel
 from backend.db import now
 
 
-@router.post("/applications/{id}/schedule-link")
+@router.post("/applications/{id}/schedule-link", dependencies=[Depends(_csrf)])
 def schedule_link(id: str, p=Depends(auth.recruiter), s=Depends(get_db)):
     a = svc.own(s, m.Application, id, p)
     if a.decision != "shortlist" or a.reassessment_required:

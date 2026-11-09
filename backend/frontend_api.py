@@ -513,16 +513,18 @@ class AiConfigInput(d.Input):
     provider: Literal["openai", "ollama"]
     model: str = Field(min_length=1, max_length=200)
     base_url: str | None = Field(default=None, max_length=500)
+    # Write-only; empty keeps the stored key. Never echoed back.
+    api_key: str | None = Field(default=None, max_length=500)
 
 
 @router.get("/ai/config")
-def ai_config_read(p=Depends(auth.admin)):
+def ai_config_read(p=Depends(auth.recruiter)):
     return ai_config.describe()
 
 
 @router.get("/ai/models")
 def ai_model_catalog(
-    provider: str | None = None, base_url: str | None = None, p=Depends(auth.admin)
+    provider: str | None = None, base_url: str | None = None, p=Depends(auth.platform_admin)
 ):
     """Live model names from the selected provider; read-only discovery."""
     effective = ai_config.config() or {}
@@ -555,17 +557,18 @@ def ai_model_catalog(
 
 
 @router.post("/ai/config")
-def ai_config_write(body: AiConfigInput, p=Depends(auth.admin), s=Depends(get_db)):
+def ai_config_write(body: AiConfigInput, p=Depends(auth.platform_admin), s=Depends(get_db)):
     try:
         row = ai_config.save(
             body.provider,
             body.model,
             body.base_url or "",
             updated_by=(s.get(m.User, p.user_id).email if p.user_id else "server"),
+            key=body.api_key,
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc))
     svc.event(s, p, "ai.configured",
         "A server administrator selected a model provider and model for this workspace; no credential is stored.")
     s.commit()
-    return {**row, "openai_key_present": ai_config.describe()["openai_key_present"]}
+    return ai_config.describe()

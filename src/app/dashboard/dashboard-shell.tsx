@@ -31,12 +31,14 @@ import {
   Search,
   Settings2,
   Sparkles,
+  UserCog,
   Users,
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useDashboard } from "./dashboard-context";
 import { LogoMark } from "../brand-logo";
+import { AiSettings } from "./ai-settings";
 import { post } from "@/lib/api";
 import { roleLabel, type Me } from "@/lib/session";
 import { playIntro, resetIntro } from "@/lib/intro";
@@ -56,6 +58,7 @@ const navigation: { label: string; href: string; icon: LucideIcon }[] = [
   },
   { label: "Aktivitas agent", href: "/dashboard/activity", icon: Activity },
 ];
+const TEAM = { label: "Tim", href: "/dashboard/team", icon: UserCog };
 
 function isActive(pathname: string, href: string) {
   return href === "/dashboard"
@@ -164,16 +167,29 @@ export function DashboardShell({
     return () => window.removeEventListener("keydown", shortcut);
   });
 
+  const [userMenu, setUserMenu] = useState(false);
+  useEffect(() => {
+    if (!userMenu) return;
+    const close = (event: globalThis.MouseEvent) => {
+      if (!(event.target as Element).closest?.(".user-menu-wrap"))
+        setUserMenu(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [userMenu]);
   function closeMenus() {
     setMobileNav(false);
     setNotifications(false);
+    setUserMenu(false);
   }
 
-  const section = navigation.find((item) => isActive(pathname, item.href));
+  const section = [...navigation, TEAM].find((item) =>
+    isActive(pathname, item.href),
+  );
   const jobMatch = pathname.match(
     /^\/dashboard\/jobs\/([^/]+)(\/approval|\/report)?$/,
   );
-  const candidateId = pathname.match(/^\/dashboard\/candidates\/(\d+)$/)?.[1];
+  const candidateId = pathname.match(/^\/dashboard\/candidates\/([^/]+)$/)?.[1];
   const subPage =
     jobMatch?.[1] === "new"
       ? "Buat lowongan"
@@ -228,59 +244,63 @@ export function DashboardShell({
           aria-label="Navigasi utama"
           activeKey={activePath}
         >
-          {navigation.map(({ label, href, icon: Icon }) => (
-            <Fragment key={href}>
-              <Link
-                href={href}
-                className={`nav-item ${isActive(activePath, href) ? "active" : ""}`}
-                aria-current={isActive(pathname, href) ? "page" : undefined}
-                data-active={isActive(activePath, href)}
-                onClick={(event) => selectNav(event, href)}
-              >
-                <Icon size={18} />
-                <span>{label}</span>
-                {label === "Lowongan" && (
-                  <span className="nav-count">{jobs.length}</span>
-                )}
-                {label === "Kandidat" && (
-                  <span className="nav-count">{candidates.length}</span>
-                )}
-              </Link>
-              {label === "Lowongan" && isActive(activePath, href) && (
-                <div
-                  className="nav-sub"
-                  role="group"
-                  aria-label="Daftar lowongan"
+          {(me.role === "admin" ? [...navigation, TEAM] : navigation).map(
+            ({ label, href, icon: Icon }) => (
+              <Fragment key={href}>
+                <Link
+                  href={href}
+                  className={`nav-item ${isActive(activePath, href) ? "active" : ""}`}
+                  aria-current={isActive(pathname, href) ? "page" : undefined}
+                  data-active={isActive(activePath, href)}
+                  onClick={(event) => selectNav(event, href)}
                 >
-                  {jobs.map((job) => {
-                    const jobHref = `/dashboard/jobs/${job.id}`;
-                    const current = isActive(activePath, jobHref);
-                    return (
-                      <Link
-                        key={job.id}
-                        href={jobHref}
-                        className={`collection-item ${current ? "active" : ""} ${job.status === "closed" ? "closed" : ""}`}
-                        aria-current={current ? "page" : undefined}
-                        onClick={(event) => selectNav(event, jobHref)}
-                      >
-                        <span className={`collection-dot ${job.color}`} />
-                        <span>{job.title}</span>
-                        <ChevronRight size={13} />
-                      </Link>
-                    );
-                  })}
-                  <Link
-                    href="/dashboard/jobs/new"
-                    className={`collection-add ${activePath === "/dashboard/jobs/new" ? "active" : ""}`}
-                    onClick={(event) => selectNav(event, "/dashboard/jobs/new")}
+                  <Icon size={18} />
+                  <span>{label}</span>
+                  {label === "Lowongan" && (
+                    <span className="nav-count">{jobs.length}</span>
+                  )}
+                  {label === "Kandidat" && (
+                    <span className="nav-count">{candidates.length}</span>
+                  )}
+                </Link>
+                {label === "Lowongan" && isActive(activePath, href) && (
+                  <div
+                    className="nav-sub"
+                    role="group"
+                    aria-label="Daftar lowongan"
                   >
-                    <Plus size={16} />
-                    Tambah lowongan
-                  </Link>
-                </div>
-              )}
-            </Fragment>
-          ))}
+                    {jobs.map((job) => {
+                      const jobHref = `/dashboard/jobs/${job.id}`;
+                      const current = isActive(activePath, jobHref);
+                      return (
+                        <Link
+                          key={job.id}
+                          href={jobHref}
+                          className={`collection-item ${current ? "active" : ""} ${job.status === "closed" ? "closed" : ""}`}
+                          aria-current={current ? "page" : undefined}
+                          onClick={(event) => selectNav(event, jobHref)}
+                        >
+                          <span className={`collection-dot ${job.color}`} />
+                          <span>{job.title}</span>
+                          <ChevronRight size={13} />
+                        </Link>
+                      );
+                    })}
+                    <Link
+                      href="/dashboard/jobs/new"
+                      className={`collection-add ${activePath === "/dashboard/jobs/new" ? "active" : ""}`}
+                      onClick={(event) =>
+                        selectNav(event, "/dashboard/jobs/new")
+                      }
+                    >
+                      <Plus size={16} />
+                      Tambah lowongan
+                    </Link>
+                  </div>
+                )}
+              </Fragment>
+            ),
+          )}
         </IndicatorGroup>
         <div className="sidebar-bottom">
           <div className="agent-status-card">
@@ -308,16 +328,37 @@ export function DashboardShell({
           <div className="sidebar-user">
             <Avatar initials={initials} color="sand" />
             <div>
-              <strong>{org}</strong>
-              <small>{role}</small>
+              <strong>{me.display_name || org}</strong>
+              <small title={org}>{role}</small>
             </div>
-            <button
-              className="icon-button"
-              aria-label="Pengaturan profil"
-              onClick={() => setModal("settings")}
-            >
-              <MoreHorizontal size={18} />
-            </button>
+            <div className="user-menu-wrap">
+              <button
+                className={`icon-button ${userMenu ? "selected" : ""}`}
+                aria-label="Menu akun"
+                aria-expanded={userMenu}
+                onClick={() => setUserMenu(!userMenu)}
+              >
+                <MoreHorizontal size={18} />
+              </button>
+              {userMenu && (
+                <div className="user-menu" role="menu">
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setUserMenu(false);
+                      setModal("settings");
+                    }}
+                  >
+                    <Settings2 size={15} />
+                    Pengaturan
+                  </button>
+                  <button role="menuitem" className="danger" onClick={logout}>
+                    <LogOut size={15} />
+                    Keluar
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </aside>
@@ -438,26 +479,25 @@ export function DashboardShell({
                 <div>
                   <dt>Akun</dt>
                   <dd>
-                    {org}
-                    <small>{role}</small>
+                    {me.display_name} · {role}
+                    <small>
+                      {me.email} · {org}
+                    </small>
                   </dd>
                 </div>
                 <div>
                   <dt>Model AI</dt>
                   <dd>
-                    Dikelola tim teknis di server.
-                    <small>
-                      API key disimpan di environment variable server, tidak
-                      pernah di browser.
-                    </small>
+                    <AiSettings canEdit={me.is_platform_admin} />
                   </dd>
                 </div>
                 <div>
                   <dt>Privasi pelamar</dt>
                   <dd>
-                    Data sensitif disembunyikan sebelum penilaian.
+                    Nama, kontak, dan data pribadi disaring sebelum CV dibaca
+                    AI.
                     <small>
-                      Agent hanya memeriksa link yang diberikan pelamar.
+                      Agent hanya membuka link yang tertulis di CV pelamar.
                     </small>
                   </dd>
                 </div>
@@ -465,18 +505,10 @@ export function DashboardShell({
               <div className="modal-actions">
                 <button
                   type="button"
-                  className="button secondary"
+                  className="button primary"
                   onClick={() => setModal(null)}
                 >
-                  Tutup
-                </button>
-                <button
-                  className="button primary"
-                  type="button"
-                  onClick={logout}
-                >
-                  <LogOut size={15} />
-                  Keluar
+                  Selesai
                 </button>
               </div>
             </>

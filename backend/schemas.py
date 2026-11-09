@@ -253,6 +253,7 @@ PRIVATE = {
     "storage_key",
     "credential_ref",
     "lease_token",
+    "api_key_enc",
     # Legacy columns retained for frozen migrations; always false, never in API output.
     "is_demo",
     "is_sample",

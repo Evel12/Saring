@@ -417,18 +417,26 @@ def review(s, job, run, p, token):
         ranked = relevance_rank({"description": r.description,
             "minimum_observable_expectation": r.minimum_observable_expectation},
             eligible)
-        if not ranked:
+        if not eligible:
             skipped_count += 1
-            progress("analysis", "No linked passage shares wording with criterion "
+            progress("analysis", "No admissible CV passage for criterion "
                 + str(requirement_number) + " (" + (r.description or "") + "); recorded as unknown without a model call.",
                 index=requirement_number, total=len(requirements), result="no-overlap")
             analyzed.append((Result(requirement_id=r.id, status="unknown", evidence_ids=[],
                 citations=[],
-                explanation="No linked passage shares wording with this criterion; automated association is unavailable. Unknown is not inability.",
-                unresolved_question="Offer an alternative example or attach source documentation covering this criterion, then re-run the review."),
+                explanation="Tidak ada bagian CV yang bisa dinilai untuk kriteria ini. Belum ada bukti bukan berarti tidak mampu.",
+                unresolved_question="Minta contoh pengalaman lain atau dokumen pendukung untuk kriteria ini."),
                 association_provenance(evidence, p, "no-overlap-skip")))
             continue
-        shortlist = [src for src, _ in ranked[:12]]
+        if ranked:
+            shortlist = [src for src, _ in ranked[:12]]
+        else:
+            # No shared wording (e.g. criterion "empati", CV says "empathy"): let the
+            # model judge meaning across languages over the most substantial lines.
+            shortlist = sorted(eligible, key=lambda e: -len(e["passage"]))[:8]
+            progress("analysis", "No shared wording with criterion " + str(requirement_number)
+                + " (" + (r.description or "") + "); the model checks meaning across languages.",
+                index=requirement_number, total=len(requirements), result="semantic-fallback")
         progress("analysis", "Analyzing requirement " + str(requirement_number) + " of "
             + str(len(requirements)) + " (" + (r.description or "") + ") with " + str(len(shortlist))
             + " shortlisted passage(s); one large model call, minutes on local models.",

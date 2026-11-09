@@ -1,5 +1,6 @@
 "use client";
 
+import { Select } from "../../ui-select";
 import { useState } from "react";
 import Link from "next/link";
 import { Search } from "lucide-react";
@@ -108,21 +109,19 @@ export default function ActivityPage() {
               </button>
             ))}
           </IndicatorGroup>
-          <select
+          <Select
+            className="filter-select"
             aria-label="Filter kandidat"
             value={candidateId}
-            onChange={(e) => {
-              setCandidateId(e.target.value);
+            onChange={(value) => {
+              setCandidateId(value);
               setLimit(PAGE_SIZE);
             }}
-          >
-            <option value="">Semua kandidat</option>
-            {candidates.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+            options={[
+              { value: "", label: "Semua kandidat" },
+              ...candidates.map((c) => ({ value: c.id, label: c.name })),
+            ]}
+          />
         </div>
 
         {[...days].map(([day, entries]) => (

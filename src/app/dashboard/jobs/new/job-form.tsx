@@ -1,5 +1,6 @@
 "use client";
 
+import { Select } from "../../../ui-select";
 import { useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 import Link from "next/link";
@@ -260,27 +261,24 @@ export function JobForm({ today }: { today: string }) {
         <div className="job-form-row">
           <div className="job-field">
             <label htmlFor="job-department">Departemen</label>
-            <select
+            <Select
               id="job-department"
               value={department}
-              onChange={(e) => setDepartment(e.target.value)}
-            >
-              {DEPARTMENTS.map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
+              onChange={setDepartment}
+              options={DEPARTMENTS.map((item) => ({
+                value: item,
+                label: item,
+              }))}
+            />
           </div>
           <div className="job-field">
             <label htmlFor="job-type">Tipe pekerjaan</label>
-            <select
+            <Select
               id="job-type"
               value={type}
-              onChange={(e) => setType(e.target.value)}
-            >
-              {JOB_TYPES.map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
+              onChange={setType}
+              options={JOB_TYPES.map((item) => ({ value: item, label: item }))}
+            />
           </div>
           <div className="job-field">
             <label htmlFor="job-location">Lokasi</label>
@@ -394,15 +392,15 @@ export function JobForm({ today }: { today: string }) {
           </div>
           <div className="job-field">
             <label htmlFor="slot-duration">Durasi</label>
-            <select
+            <Select
               id="slot-duration"
               value={slotDuration}
-              onChange={(e) => setSlotDuration(e.target.value)}
-            >
-              <option value="30">30 menit</option>
-              <option value="45">45 menit</option>
-              <option value="60">60 menit</option>
-            </select>
+              onChange={setSlotDuration}
+              options={["30", "45", "60"].map((m) => ({
+                value: m,
+                label: `${m} menit`,
+              }))}
+            />
           </div>
           <button type="button" className="button secondary" onClick={addSlot}>
             <Plus size={15} />

@@ -5,6 +5,9 @@ export type Me = {
   organization_id: string;
   user_id: string | null;
   role: "admin" | "recruiter" | "candidate" | string;
+  is_platform_admin: boolean;
+  display_name: string;
+  email: string;
   memberships: { org_id: string; role: string; organization_name: string }[];
 };
 

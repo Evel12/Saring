@@ -18,7 +18,7 @@ export default function PublicLayout({
           <span className="public-topbar-label">Portal pelamar</span>
         </header>
         <main>
-          {children}
+          <div className="public-center">{children}</div>
           <footer className="page-footer">
             <span>
               saring<span>.</span> <i />

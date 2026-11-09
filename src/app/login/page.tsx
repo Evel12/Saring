@@ -34,7 +34,9 @@ export default async function LoginPage({
           <span className="public-topbar-label">Ruang kerja HRD</span>
         </header>
         <main>
-          <LoginForm next={target} />
+          <div className="public-center">
+            <LoginForm next={target} />
+          </div>
           <footer className="page-footer">
             <span>
               saring<span>.</span> <i />

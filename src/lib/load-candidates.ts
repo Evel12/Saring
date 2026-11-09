@@ -94,6 +94,8 @@ function describe(e: Event): string {
         return `Mengambil ${d.evidence ?? ""} baris profesional dari CV sebagai bukti.`;
       if (d.step === "review")
         return `Selesai: ${d.index ?? ""} kriteria dinilai, menunggu keputusan HR.`;
+      if (d.result === "semantic-fallback")
+        return `Kriteria ${d.index}/${d.total}: kata di CV tidak sama persis, AI memeriksa maknanya (termasuk lintas bahasa).`;
       if (d.result === "no-overlap")
         return `Kriteria ${d.index}/${d.total}: tidak ada kata yang cocok di CV, dicatat belum ada bukti.`;
       if (d.result)
@@ -190,6 +192,12 @@ const tidy = (text: string) =>
     .replace(/^[\s•·\-–*.…]+/, "")
     .trim();
 
+// A useful evidence line is a sentence, not a heading ("WORK EXPERIENCE") or a date range.
+const meaningful = (text: string) =>
+  text.length >= 25 &&
+  text !== text.toUpperCase() &&
+  !/^[\d\s\-–/.,]*(present|sekarang|now)?$/i.test(text);
+
 async function toCandidate(
   a: Application & { schedule_token?: string | null },
   person: Person | undefined,
@@ -215,18 +223,47 @@ async function toCandidate(
 
   const skills = requirements.map((r) => {
     const rev = revisionOf(r.id);
-    const quote = evidence.find((e) =>
-      rev?.evidence_ids.includes(e.id),
-    )?.passage;
+    const quotes = evidence
+      .filter((e) => rev?.evidence_ids.includes(e.id))
+      .map((e) => tidy(e.passage))
+      .filter(meaningful)
+      .slice(0, 2);
     return {
       name: r.description,
       status: SKILL[rev?.state ?? "unknown"],
       evidence:
         rev?.explanation ||
-        (quote ? `CV: ‘${quote}’` : "Belum ada bukti di CV."),
+        (quotes.length ? "Ditemukan di CV." : "Belum ada bukti di CV."),
+      quotes,
       essential: r.importance === "essential",
+      requirementId: r.id,
+      evidenceIds: rev?.evidence_ids ?? [],
     };
   });
+
+  // Blind-screening excerpt: CV lines the agent linked to a criterion first,
+  // then lines that mention a skill by name; headings and bare dates are dropped.
+  const tagged = evidence
+    .map((e) => {
+      const text = tidy(e.passage);
+      const lower = text.toLowerCase();
+      const linked = requirements
+        .filter((r) => revisionOf(r.id)?.evidence_ids.includes(e.id))
+        .map((r) => r.description);
+      const named = requirements
+        .filter((r) => lower.includes(r.description.toLowerCase()))
+        .map((r) => r.description);
+      return {
+        text,
+        skills: [...new Set([...linked, ...named])],
+        linked: linked.length,
+      };
+    })
+    .filter((line) => meaningful(line.text) && line.skills.length);
+  const cvExcerpt = tagged
+    .sort((a, b) => b.linked - a.linked || b.skills.length - a.skills.length)
+    .slice(0, 8)
+    .map(({ text, skills }) => ({ text, skills }));
   const points = skills.reduce(
     (sum, s) =>
       sum + (s.status === "verified" ? 1 : s.status === "claimed" ? 0.5 : 0),
@@ -302,12 +339,7 @@ async function toCandidate(
           reachable: !["not_found", "unreachable"].includes(linkState ?? ""),
         }
       : null,
-    skills: skills.map(({ name, status, evidence, essential }) => ({
-      name,
-      status,
-      evidence,
-      essential,
-    })),
+    skills,
     summary:
       insights?.summary ??
       brief?.summary ??
@@ -316,10 +348,7 @@ async function toCandidate(
     scoreParts: [],
     reviewReasons,
     hiddenFields: [],
-    cvExcerpt: evidence
-      .map((e) => tidy(e.passage))
-      .filter((line) => line.length > 3)
-      .slice(0, 8),
+    cvExcerpt,
     pipeline: (events?.items ?? []).map(step),
     questions: analyzed ? suggestQuestions(skills) : [],
     scheduleToken: a.schedule_token,

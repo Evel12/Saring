@@ -66,6 +66,7 @@ def main():
             org_id = member.org_id
         else:
             org, user = cli.create_admin(s, ORG, EMAIL, PASSWORD)
+            user.is_platform_admin = True  # demo owner may also pick the AI model
             org_id = org.id
         p = auth.Principal(org_id, user.id, "admin", "seed")
         for job in JOBS:

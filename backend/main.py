@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.cors import CORSMiddleware
 from backend.db import engine
-from backend import auth, api, compat, frontend_api, interview_api, apply_api, slots_api
+from backend import auth, api, compat, frontend_api, interview_api, apply_api, slots_api, team_api
 
 
 class PortalAccessFilter(logging.Filter):
@@ -32,7 +32,7 @@ logging.getLogger("uvicorn.access").addFilter(PortalAccessFilter())
 async def lifespan(app):
     with engine.connect() as c:
         revision = c.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        if revision != "014":
+        if revision != "015":
             raise RuntimeError(
                 "Run python -m alembic upgrade head before starting the API"
             )
@@ -112,7 +112,7 @@ def health():
         c.execute(text("SELECT 1"))
     cfg = ai_config.config()
     return {
-        "schema": "014",
+        "schema": "015",
         "mode": "live",
         "model": (
             "configured"
@@ -133,3 +133,4 @@ app.include_router(compat.portal_router)
 # Public apply link (no login; token-in-URL authentication).
 app.include_router(apply_api.router)
 app.include_router(slots_api.router)
+app.include_router(team_api.router)

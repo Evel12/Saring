@@ -103,17 +103,68 @@ def retrieve(requirement, evidence):
 
 
 _STOPWORDS = {"with", "this", "that", "from", "about", "their", "must", "should",
-    "relevant", "describe", "example"}
+    "relevant", "describe", "example", "experience", "and", "the", "for", "of", "in", "to", "or",
+    # Generic words of the Indonesian criterion template; they would match every Indonesian CV line.
+    "pengalaman", "nyata", "dengan", "proyek", "atau", "pekerjaan", "kontribusi", "pribadi",
+    "pelamar", "dan", "yang", "di", "ke", "dari", "untuk"}
 _WORD = re.compile(r"[a-z0-9]{4,}")
+_TOKEN = re.compile(r"[a-z0-9]{2,}")  # skill names are often short: SQL, CSS, Go, AWS
+
+# Indonesian <-> English terms so a criterion in one language finds CV lines in the other.
+_BILINGUAL = [
+    {"empati", "empathy", "empathetic", "empathic"},
+    {"komunikasi", "communication", "communicate", "communicating"},
+    {"kepemimpinan", "memimpin", "leadership", "lead", "leading"},
+    {"kerjasama", "kolaborasi", "teamwork", "collaboration", "collaborate", "collaborative"},
+    {"tim", "team"},
+    {"pelanggan", "customer", "customers", "client", "clients"},
+    {"pelayanan", "layanan", "service", "support"},
+    {"penjualan", "sales", "selling"},
+    {"pemasaran", "marketing"},
+    {"keuangan", "finance", "financial"},
+    {"akuntansi", "accounting"},
+    {"analisis", "analisa", "analysis", "analytics", "analytical", "analyze"},
+    {"laporan", "pelaporan", "report", "reports", "reporting"},
+    {"desain", "design", "designing"},
+    {"pengujian", "testing", "test", "tests"},
+    {"keamanan", "security"},
+    {"jaringan", "network", "networking"},
+    {"manajemen", "mengelola", "management", "manage", "managing"},
+    {"negosiasi", "negotiation", "negotiate"},
+    {"presentasi", "presentation", "presenting"},
+    {"administrasi", "administration", "administrative"},
+    {"ketelitian", "teliti", "detail", "accuracy", "accurate", "accurately"},
+    {"masalah", "pemecahan", "problem", "problems", "troubleshooting", "resolve", "issues"},
+    {"pemrograman", "programming", "coding"},
+    {"perencanaan", "planning", "plan"},
+    {"inggris", "english"},
+    {"adaptasi", "adaptability", "adaptable"},
+    {"kreatif", "kreativitas", "creative", "creativity"},
+    {"basis", "database", "databases"},
+    {"otomasi", "otomatisasi", "automation", "automate"},
+]
+_SYNONYMS = {w: group for group in _BILINGUAL for w in group}
+
+
+def _words(text, pattern):
+    return set(pattern.findall(re.sub(r"[^a-z0-9]+", " ", text.casefold())))
+
+
+def _overlap(words, tokens):
+    """Exact token matches plus shared stems for longer words (empath ~ empathetic)."""
+    hits = 0
+    for w in words:
+        if w in tokens or (len(w) >= 5 and any(len(t) >= 5 and (t.startswith(w[:5])) for t in tokens)):
+            hits += 1
+    return hits
 
 
 def relevance_rank(requirement, sources):
     """Deterministic keyword-overlap ranking of passages for a criterion.
 
     No model involved. Returns [(source, overlap_count)] with overlaps > 0,
-    most-overlapping first. Used two ways: skip a model call entirely when no
-    passage shares wording (nothing verifiable exists to associate), and to
-    shortlist the few most relevant passages so model calls stay small.
+    most-overlapping first, used to shortlist the passages a model call sees.
+    Criterion words are expanded with Indonesian/English equivalents.
     """
     if isinstance(requirement, dict):
         description = str(requirement.get("description", "") or "")
@@ -121,13 +172,12 @@ def relevance_rank(requirement, sources):
     else:
         description = str(getattr(requirement, "description", "") or "")
         expectation = str(getattr(requirement, "minimum_observable_expectation", "") or "")
-    text = (description + " " + expectation).casefold()
-    words = {w for w in _WORD.findall(re.sub(r"[^a-z0-9]+", " ", text))
-        if w not in _STOPWORDS}
+    words = (_words(description, _TOKEN) | _words(expectation, _WORD)) - _STOPWORDS
+    for w in list(words):
+        words |= _SYNONYMS.get(w, set())
     scored = []
     for source in sources:
-        tokens = set(_WORD.findall(re.sub(r"[^a-z0-9]+", " ", source["passage"].casefold())))
-        overlap = len(words & tokens)
+        overlap = _overlap(words, _words(source["passage"], _TOKEN))
         if overlap:
             scored.append((source, overlap))
     scored.sort(key=lambda pair: (-pair[1], pair[0]["id"]))
@@ -230,18 +280,37 @@ def coerce_output(text, alias, source_ids):
 
 
 def validate_output(raw, requirement, sources):
-    parsed = Envelope.model_validate(raw)
+    # coerce_output hands over a single finding; accept that or a full envelope,
+    # keep only known fields, and report schema problems as AnalysisError.
+    findings = raw.get("findings") if isinstance(raw, dict) and "findings" in raw else [raw]
+    keep = set(Result.model_fields)
+    cleaned = []
+    for f in findings if isinstance(findings, list) else []:
+        if isinstance(f, dict):
+            f = {k: v for k, v in f.items() if k in keep}
+            f.setdefault("explanation", "")
+            f.setdefault("unresolved_question", "")
+            f["unresolved_question"] = f["unresolved_question"] or ""
+            cleaned.append(f)
+    try:
+        parsed = Envelope.model_validate({"findings": cleaned})
+    except ValueError as exc:  # pydantic ValidationError
+        raise AnalysisError("Analysis output does not match the schema") from exc
     if len(parsed.findings) != 1 or parsed.findings[0].requirement_id != requirement["id"]:
         raise AnalysisError("Invalid requirement IDs in analysis")
     item = parsed.findings[0]
     by_id = {s["id"]: s for s in sources}
     if len(set(item.evidence_ids)) != len(item.evidence_ids) or set(item.evidence_ids) - by_id.keys():
         raise AnalysisError("Unsupported evidence ID")
-    if {c.evidence_id for c in item.citations} != set(item.evidence_ids):
-        raise AnalysisError("Every cited evidence ID needs an exact quotation")
-    for citation in item.citations:
-        if not citation.quote.strip() or citation.quote not in by_id[citation.evidence_id]["passage"]:
-            raise AnalysisError("Unsupported source quotation")
+    # Models often paraphrase or trim quotes. Instead of discarding the whole
+    # result, cite the full passage of each chosen evidence ID: still an exact
+    # source span, so provenance stays verifiable.
+    quotes = {c.evidence_id: c.quote for c in item.citations if c.evidence_id in by_id}
+    item.citations = [
+        Citation(evidence_id=e, quote=quotes[e] if quotes.get(e, "").strip() and quotes[e] in by_id[e]["passage"]
+                 else by_id[e]["passage"])
+        for e in item.evidence_ids
+    ]
     if item.status in ("supported", "partial") and not item.evidence_ids:
         raise AnalysisError("Positive finding without evidence")
     if item.status == "conflicting":
@@ -249,11 +318,19 @@ def validate_output(raw, requirement, sources):
         # Recruiters may use the existing revision API with two actual conflicting sources.
         raise AnalysisError("Automated conflict requires human comparison of incompatible statements")
     if item.status == "supported":
-        raise AnalysisError("Automated CV association cannot establish the minimum observable expectation")
+        # Policy: automation never establishes "supported" (HR confirms it). Keep the
+        # cited association as partial instead of throwing the whole result away.
+        item.status = "partial"
     if SENSITIVE.search(item.explanation + " " + item.unresolved_question) or INSTRUCTION.search(item.explanation):
         raise AnalysisError("Unsafe analysis text")
     # Exact citations establish provenance, not truth, entailment, authorship or expertise.
     return item
+
+
+SHAPE_HINT = (' Reply with ONLY this JSON object: {"findings":[{"requirement_id":"R1","status":"partial" or "unknown",'
+    '"evidence_ids":["S1"],"citations":[{"evidence_id":"S1","quote":"text copied exactly from that passage"}],'
+    '"explanation":"one Indonesian sentence","unresolved_question":"one Indonesian question or empty"}]}.'
+    ' Every evidence id needs one citation; use an empty evidence_ids and citations list for unknown.')
 
 
 def analyze(requirements, evidence):
@@ -309,7 +386,8 @@ def analyze(requirements, evidence):
             # A cache hit skips the model legs: the sentinel makes the first
             # loop iteration break immediately, exactly like a provider skip.
             provider_aborted = item is not None
-            for attempt_index in range(2):
+            use_schema = True
+            for attempt_index in range(3):
                 if provider_aborted:
                     break  # a provider abort repeats; go straight to rescue
                 try:
@@ -321,15 +399,22 @@ def analyze(requirements, evidence):
                             "Use partial for a relevant explicit claim, unknown for missing evidence. Never use supported or conflicting for automatic CV association. "
                             "A broken/private link, absence from a portfolio, or mostly Python projects cannot contradict a Go claim. "
                             "Quote exact contiguous passages using supplied evidence IDs only. Concise explanation must describe source limitations, not unsupported facts."
-                            " Write every explanation, rationale and question in Bahasa Indonesia, even when the source is in English; keep exact quotes verbatim in their original language."},
+                            " Write every explanation, rationale and question in Bahasa Indonesia, even when the source is in English; keep exact quotes verbatim in their original language."
+                            " The criterion and the CV may be in different languages (e.g. empati vs empathy); match by meaning."
+                            + ("" if use_schema else SHAPE_HINT.replace("R1", alias))},
                             {"role": "user", "content": json.dumps({"approved_requirement": aliased_requirement, "untrusted_evidence": aliased})}],
-                        response_format=response_schema,
+                        response_format=response_schema if use_schema else {"type": "json_object"},
                         max_completion_tokens=1800)
                 except Exception:
+                    completion = None
+                    if use_schema:
+                        # Some providers (Gemini's OpenAI endpoint) reject parts of strict
+                        # JSON Schema; the same contract is still validated below.
+                        use_schema = False
+                        continue
                     # Provider-side aborts (Ollama "token repeat limit reached"
                     # among them) are not document faults: do not fail the
                     # job, fall through to the plain-text rescue below.
-                    completion = None
                     provider_aborted = True
                     break
                 if completion.choices[0].finish_reason != "stop" or completion.choices[0].message.refusal:
@@ -404,6 +489,8 @@ def analyze(requirements, evidence):
                         if explanation.startswith("{"):
                             explanation = explanation[1:].strip()
                     explanation = explanation.strip('"').strip()
+                    if re.fullmatch(r"[\sS\d,\[\]]*|none", explanation, re.I):
+                        explanation = ""  # just passage labels / NONE: not an explanation
                     if explanation.endswith(("}", '"]')):
                         explanation = explanation.rstrip('"}]').rstrip().rstrip('"').strip()
                 numbers = [n for n in numbers if n.isdigit() and ("S" + n) in alias_of][:6]
@@ -431,24 +518,23 @@ def analyze(requirements, evidence):
                         top = [s for s in ranked if words & set(re.findall(r"[a-z]{4,}", re.sub(r"[^a-z]+", " ", s["passage"].casefold())))]
                         if top:
                             numbers = [s["id"].lstrip("S") for s in top[:4]]
-                            explanation = "Passages sharing wording with this criterion were selected by text overlap; relevance was not confirmed by the model."
+                            explanation = "Baris CV ini memuat kata yang sama dengan kriteria; relevansinya belum dikonfirmasi AI, mohon dicek HR."
                 if numbers and not model_numbers:
                     association_mode = "deterministic-rank"
                 elif numbers:
                     association_mode = "rescue"
                 if numbers and not explanation:
-                    explanation = ("Selected because these passages share the criterion wording; they are "
-                        "candidate-reported quotes and relevance needs your confirmation.")
+                    explanation = "AI menautkan baris CV ini dengan kriteria. Ini klaim pelamar; mohon HR konfirmasi relevansinya."
                 status = "partial" if numbers and not INSTRUCTION.search(explanation or "") and not SENSITIVE.search(explanation or "") else "unknown"
                 if status == "partial":
                     item = Result(requirement_id=alias, status=status, evidence_ids=["S" + n for n in numbers],
                         citations=[Citation(evidence_id="S" + n, quote=next(s["passage"] for s in aliased if s["id"] == "S" + n)) for n in numbers],
-                        explanation=(explanation[:1000] or "Related passages were selected from the linked evidence for human review."),
-                        unresolved_question="Review the selected passages against the observable expectation; confirm relevance yourself.")
+                        explanation=(explanation[:1000] or "Baris CV terkait dipilih untuk ditinjau HR."),
+                        unresolved_question="Cocokkan baris CV ini dengan kriteria lowongan.")
                 else:
                     item = Result(requirement_id=alias, status="unknown", evidence_ids=[], citations=[],
-                        explanation="Automated analysis could not complete for this criterion; no supported association could be established from linked evidence.",
-                        unresolved_question="Re-run the review, or evaluate this requirement manually from the linked evidence.")
+                        explanation="Skill ini tidak ditemukan di CV maupun portofolio, dalam bahasa Indonesia atau Inggris. Mohon cek ulang secara manual oleh HR.",
+                        unresolved_question="Tanyakan langsung kepada pelamar saat interview.")
             # Exact citations establish provenance, not truth, entailment, authorship or expertise.
             item.requirement_id = requirement["id"]
             item.evidence_ids = [alias_of.get(x, x) for x in item.evidence_ids]

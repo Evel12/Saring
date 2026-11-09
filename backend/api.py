@@ -47,7 +47,12 @@ def login(body: d.Login, request: Request, s=Depends(get_db)):
     member = (
         s.scalar(
             select(m.Membership)
-            .where(m.Membership.user_id == user.id, m.Membership.active == True)
+            .join(m.Organization, m.Organization.id == m.Membership.org_id)
+            .where(
+                m.Membership.user_id == user.id,
+                m.Membership.active == True,
+                m.Organization.status == "active",
+            )
             .order_by(m.Membership.created_at)
         )
         if user
@@ -91,9 +96,13 @@ def me(p=Depends(auth.principal), s=Depends(get_db)):
                     "organization_name": s.get(m.Organization, member.org_id).name,
                 }
             )
+    user = s.get(m.User, p.user_id) if p.user_id else None
     return {
         "organization_id": p.org_id,
         "user_id": p.user_id,
+        "is_platform_admin": bool(user and user.is_platform_admin),
+        "display_name": user.display_name if user else "",
+        "email": user.email if user else "",
         "role": p.role,
         "application_id": p.application_id,
         "scopes": p.scopes,
@@ -137,6 +146,8 @@ def memberships(pg=Depends(pagination), p=Depends(auth.admin), s=Depends(get_db)
 
 @router.post("/memberships", response_model=d.MembershipOut, status_code=201)
 def member_create(body: d.MemberInput, p=Depends(auth.admin), s=Depends(get_db)):
+    # Nobody types another person's password: members join through /team-invitations.
+    raise HTTPException(410, "Use team invitations; members set their own password")
     user = s.scalar(select(m.User).where(m.User.email == body.email.lower()))
     if not user:
         if not body.password:
