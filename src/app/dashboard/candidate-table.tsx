@@ -9,6 +9,7 @@ import {
   ArrowUpRight,
   ChevronRight,
   Filter,
+  RefreshCw,
   Search,
   Sparkles,
 } from "lucide-react";
@@ -55,6 +56,30 @@ export function Status({ status }: { status: Candidate["status"] }) {
       <i />
       {status}
     </span>
+  );
+}
+
+// Muat ulang data pelamar dari server, misalnya setelah lamaran baru masuk.
+function RefreshButton() {
+  const router = useRouter();
+  const [spinning, setSpinning] = useState(false);
+  return (
+    <button
+      type="button"
+      className="icon-button refresh-button"
+      title="Muat ulang data pelamar"
+      aria-label="Muat ulang data pelamar"
+      disabled={spinning}
+      onClick={() => {
+        setSpinning(true);
+        router.refresh();
+        setTimeout(() => {
+          setSpinning(false);
+        }, 1200);
+      }}
+    >
+      <RefreshCw className={spinning ? "spin" : ""} size={16} />
+    </button>
   );
 }
 
@@ -128,6 +153,7 @@ export function CandidateTable({
               Pelamar <span className="count">0</span>
             </h2>
           </div>
+          <RefreshButton />
         </div>
         <div className="empty-state">
           <Search size={25} />
@@ -167,6 +193,7 @@ export function CandidateTable({
             <ArrowUpRight size={16} />
           </Link>
         )}
+        <RefreshButton />
       </div>
       <div className="table-toolbar">
         <IndicatorGroup

@@ -77,12 +77,15 @@ export function DashboardShell({
     me.memberships.find((m) => m.org_id === me.organization_id)
       ?.organization_name ?? "Organisasi";
   const role = roleLabel(me.role);
-  const initials = org
+  // Inisial avatar mengikuti nama orang yang login, bukan nama organisasi.
+  const nameForAvatar = me.display_name || org;
+  const initials = nameForAvatar
+    .trim()
     .split(/\s+/)
+    .slice(0, 2)
     .map((w) => w[0])
     .join("")
-    .slice(0, 2)
-    .toUpperCase();
+    .toUpperCase() || "?";
   async function logout() {
     await post("/auth/logout").catch(() => undefined);
     resetIntro();

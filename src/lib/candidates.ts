@@ -4,6 +4,8 @@ export type SkillStatus = "verified" | "claimed" | "contradicted" | "unknown";
 
 export type SkillCheck = {
   name: string;
+  /** Kata kunci dua bahasa dari kriteria ini untuk penandaan di CV. */
+  matchTerms: string[];
   status: SkillStatus;
   /** Penjelasan agent (bahasa Indonesia). */
   evidence: string;
@@ -15,8 +17,16 @@ export type SkillCheck = {
   evidenceIds?: string[];
 };
 
-/** Baris CV yang relevan dengan lowongan, beserta skill yang disentuhnya. */
-export type ExcerptLine = { text: string; skills: string[] };
+/** Baris CV untuk blind screening, dibagi per jenis. */
+export type ExcerptLine = {
+  text: string;
+  /** Nama kriteria lowongan yang disentuh baris ini (kosong kalau tidak ada). */
+  skills: string[];
+  /** Kata kunci dua bahasa untuk disorot di teks (mis. empatinya <-> empathy). */
+  terms: string[];
+  /** "experience" = pengalaman kerja/organisasi + tugasan; "facts" = fakta lain. */
+  kind: "experience" | "facts";
+};
 
 export type ScorePart = {
   label: string;

@@ -9,7 +9,7 @@ class AnalysisError(ValueError):
     """Only controlled, applicant-free diagnostic messages."""
 
 
-PROMPT_VERSION = "requirement-evidence-v2"
+PROMPT_VERSION = "requirement-evidence-v3"
 PROFILE_VERSION = "professional-lines-v3"
 SENSITIVE = re.compile(r"(?:profile\s+)?photo\s*:|headshot|portrait|\breligion\b|date of birth|birth date|born (?:on|in)|marital|\bgender\b|\bnationality\b|(?:home\s+|postal\s+)?address\s*:|(?:phone|e-?mail)\s*:|personality|honesty|\bemotion\b|learning potential|\bname\s*:|\b(?:Muslim|Christian|Hindu|Buddhist|Catholic|atheist)\b|agama|tanggal lahir|status perkawinan|jenis kelamin|alamat|nomor telepon", re.I)
 INSTRUCTION = re.compile(r"ignore\s+(all|previous|prior)|system\s*(prompt|message)|developer\s*message|instructions?\s*:|auto.?reject|mark\s+.*supported|send\s+.*(email|secret)|tool\s*call", re.I)
@@ -140,8 +140,22 @@ _BILINGUAL = [
     {"inggris", "english"},
     {"adaptasi", "adaptability", "adaptable"},
     {"kreatif", "kreativitas", "creative", "creativity"},
-    {"basis", "database", "databases"},
-    {"otomasi", "otomatisasi", "automation", "automate"},
+    {"basis", "database", "databases", "basis data"},
+    {"otomasi", "otomatisasi", "automation", "automate", "automated"},
+    {"mengepalai", "supervisi", "supervising", "supervise"},
+    {"organisasi", "organization", "organisation"},
+    {"komunitas", "community", "communities"},
+    {"keputusan", "decision", "decisions", "decision making", "decision-making"},
+    {"fasilitasi", "fasilitator", "facilitation", "facilitate", "facilitator"},
+    {"ekskibisi", "eksebisi", "exhibition", "exhibitions"},
+    {"kebersihan", "cleanliness", "cleaning", "clean"},
+    {"kejujuran", "integritas", "integrity"},
+    {"masa", "period", "periode"},
+    {"digunakan", "used", "using", "memakai", "implementasi", "implementation"},
+    {"mengubah", "modify", "modifying", "migrasi", "migration"},
+    {"adaptabilitas", "adaptability", "terbiasa", "adapt"},
+    {"koordinasi", "mengoordinasi", "coordination", "coordinating", "coordinate"},
+    {"mengatur", "mengelola", "organizing", "arrange", "manage", "organize"},
 ]
 _SYNONYMS = {w: group for group in _BILINGUAL for w in group}
 
@@ -399,6 +413,7 @@ def analyze(requirements, evidence):
                             "Use partial for a relevant explicit claim, unknown for missing evidence. Never use supported or conflicting for automatic CV association. "
                             "A broken/private link, absence from a portfolio, or mostly Python projects cannot contradict a Go claim. "
                             "Quote exact contiguous passages using supplied evidence IDs only. Concise explanation must describe source limitations, not unsupported facts."
+                            " For unknown results write one short neutral Indonesian sentence saying simply that the CV contains no explicit mention of the criterion; do not speculate about reasons, skill types or wording."
                             " Write every explanation, rationale and question in Bahasa Indonesia, even when the source is in English; keep exact quotes verbatim in their original language."
                             " The criterion and the CV may be in different languages (e.g. empati vs empathy); match by meaning."
                             + ("" if use_schema else SHAPE_HINT.replace("R1", alias))},
@@ -509,6 +524,11 @@ def analyze(requirements, evidence):
                             re.sub(r"[^a-z]+", " ", (str(aliased_requirement.get("description", "")) + " " + str(aliased_requirement.get("minimum_observable_expectation", ""))).casefold()))
                         if w not in {"with", "this", "that", "from", "about", "their", "must", "should", "relevant", "describe", "example"}
                     }
+                    # Bilingual expansion: "empati" also matches CV lines with
+                    # "empathy", so the deterministic fallback finds cross-
+                    # language evidence the same way relevance_rank does.
+                    for w in list(words):
+                        words |= _SYNONYMS.get(w, set())
                     if words:
                         ranked = sorted(
                             aliased,
@@ -533,7 +553,7 @@ def analyze(requirements, evidence):
                         unresolved_question="Cocokkan baris CV ini dengan kriteria lowongan.")
                 else:
                     item = Result(requirement_id=alias, status="unknown", evidence_ids=[], citations=[],
-                        explanation="Skill ini tidak ditemukan di CV maupun portofolio, dalam bahasa Indonesia atau Inggris. Mohon cek ulang secara manual oleh HR.",
+                        explanation="Tidak ada baris CV yang berhubungan dengan kriteria ini, dalam bahasa Indonesia maupun Inggris. Kemampuan pelamar perlu dikonfirmasi kembali sebelum memutuskan.",
                         unresolved_question="Tanyakan langsung kepada pelamar saat interview.")
             # Exact citations establish provenance, not truth, entailment, authorship or expertise.
             item.requirement_id = requirement["id"]

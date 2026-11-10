@@ -2,11 +2,13 @@
 import { serverGet } from "./server-api";
 import type { Activity, Application, Brief, Document, Page } from "./types";
 import type { Job } from "./job-store";
+import { expandSkill } from "./skill-keywords";
 import type {
   AgentStep,
   Candidate,
   CandidateStatus,
   Interview,
+  InterviewQuestion,
   SkillStatus,
 } from "./candidates";
 
@@ -147,7 +149,9 @@ function step(e: Event): AgentStep {
   };
 }
 
-// Usulan pertanyaan interview (bahasa Indonesia), fokus ke skill yang buktinya paling lemah.
+// Usulan pertanyaan interview: mayoritas dari lowongan (judul, kerja harian,
+// pencapaian paling kuat), bukan dari status verifikasi skill. Verifikasi CV
+// hanya dipakai untuk maksimal dua pertanyaan ke bukti terlemah.
 const ORDER: Record<SkillStatus, number> = {
   contradicted: 0,
   unknown: 1,
@@ -155,48 +159,81 @@ const ORDER: Record<SkillStatus, number> = {
   verified: 3,
 };
 function suggestQuestions(
+  job: Job | undefined,
   skills: { name: string; status: SkillStatus; essential: boolean }[],
-) {
-  const ask: Record<SkillStatus, (s: string) => string> = {
-    contradicted: (s) =>
-      `Ada informasi yang berbeda soal ${s} di CV. Bisa ceritakan pengalamanmu yang sebenarnya dengan ${s}?`,
-    unknown: (s) =>
-      `CV belum menyebut ${s}. Pernahkah kamu memakai ${s}, atau teknologi serupa? Ceritakan contohnya.`,
-    claimed: (s) =>
-      `Ceritakan satu proyek di mana kamu memakai ${s}: apa peranmu dan apa hasilnya?`,
-    verified: (s) =>
-      `Apa tantangan tersulit yang pernah kamu hadapi saat memakai ${s}, dan bagaimana kamu menyelesaikannya?`,
+  strengths: string[],
+): InterviewQuestion[] {
+  const statusWord: Record<SkillStatus, string> = {
+    // Pertanyaan penggali dibedakan ringan supaya unsur statusnya tidak menonjol.
+    contradicted: `Ada dua keterangan yang berbeda soal {s} di CV. Mana yang benar, dan bagaimana pengalamanmu yang sebenarnya dengan {s}?`,
+    unknown: `CV tidak mencantumkan bukti untuk {s}. Jujur saja, pengalaman mana yang paling berkaitan dengan {s}?`,
+    claimed: `Pilih satu pengalamanmu seputar {s}: apa yang kamu kerjakan, dan apa hasil yang tertulis?`,
+    verified: `Apa pengalaman paling menantangmu seputar {s}, dan bagaimana kamu menghadapinya?`,
   };
-  const why: Record<SkillStatus, string> = {
-    contradicted: "bukti bertentangan",
-    unknown: "belum ada bukti di CV",
-    claimed: "baru sebagian terbukti",
-    verified: "menggali kedalaman",
-  };
-  return [...skills]
-    .sort(
-      (a, b) =>
-        ORDER[a.status] - ORDER[b.status] ||
-        Number(b.essential) - Number(a.essential),
-    )
-    .slice(0, 5)
+  const dig = [...skills]
+    .sort((a, b) => ORDER[a.status] - ORDER[b.status])
+    .slice(0, 2)
     .map((s) => ({
-      question: ask[s.status](s.name),
-      reason: `${s.name} (${s.essential ? "wajib" : "tambahan"}, ${why[s.status]})`,
+      question: statusWord[s.status].split("{s}").join(s.name),
+      reason: `${s.name} (${s.essential ? "wajib" : "tambahan"})`,
     }));
+  const position = job?.title ?? "posisi ini";
+  const company = job?.company;
+  const jobBased: InterviewQuestion[] = [
+    {
+      question: `Untuk ${position}, pengalaman apa yang paling menyiapkanmu mengambil peran ini${
+        company ? ` di ${company}` : ""
+      }?`,
+      reason: `${position} (dari lowongan)`,
+    },
+    {
+      question: `Kerja harian seperti apa yang kamu bayangkan untuk ${position}, dan bagaimana kamu menata waktunya?`,
+      reason: `${position} (dari lowongan)`,
+    },
+    {
+      question: strengths[0]
+        ? `Dari CV: ${strengths[0]} — ceritakan cerita di balik itu (peranmu dan yang dihasilkan).`
+        : `Dari CV, pencapaian mana yang paling kamu banggakan, dan apa hasilnya?`,
+      reason: "pencapaian terbesar (dari CV)",
+    },
+  ];
+  // Campur: pertanyaan lowongan dulu, sisanya penggali bukti terlemah.
+  return [...jobBased.slice(0, 2), dig[0], jobBased[2], dig[1]].filter(
+    Boolean,
+  );
 }
+
+// Singkatan gelar di kebanyakan CV diubah jadi istilah yang jelas bagi HR.
+const DEGREE: Record<string, string> = { s1: "Sarjana (S1)", s2: "Magister (S2)", s3: "Doktor (S3)", d1: "Diploma 1", d2: "Diploma 2", d3: "Diploma 3 (D3)", d4: "Diploma 4 (D4)", sma: "SMA/SMK", smk: "SMK" };
 
 const tidy = (text: string) =>
   text
+    .replace(/\u00a0|\u200b/g, " ")
     .replace(/\s+/g, " ")
-    .replace(/^[\s•·\-–*.…]+/, "")
-    .trim();
+    // Coret leading bullet/penanda dari segala varian CV agar indentasi seragam.
+    .replace(/^(?:[\s•·‣▪◆●○◦»>*.\-–—…]|&#8226;)+/, "")
+    .trim()
+    .replace(/\b(S[1-3]|D[1-4]|SMA|SMK)\b/g, (word) => DEGREE[word.toLowerCase()] ?? word);
 
-// A useful evidence line is a sentence, not a heading ("WORK EXPERIENCE") or a date range.
+// Heading bagian CV ("PENGALAMAN KERJA", "Education") bukan kalimat bukti.
+const HEADING =
+  /^(skills?|experiences?|work|education|projects?|certifications?|awards?|organizations?|experiences?|competitions?|references?|languages?|about me|summary|profil|skills?:?|pengalaman|organisasi|keahlian|keterampilan|kemampuan|pendidikan|proyek|sertifikasi?|prestasi|pencapaian|pekerjaan|beasiswa|kegiatan|pelatihan|seminar|tanggung jawab)\b[^a-z]*$/i;
+
+// Baris tanggal ("2019 - 2022", "Jan 2020 – Present") dipakai sebagai penanda periode.
+const DATE_ONLY =
+  /^(?:[\s•·\-–—,.|]*)(?:\b(?:jan|feb|mar|apr|mei|may|jun|jul|agu|aug|sep|okt|oct|nov|des|dec)[a-z]*\.?\s*)?(?:19|20)\d{2}(?:\s*[-–—/]\s*(?:\b(?:jan|feb|mar|apr|mei|may|jun|jul|agu|aug|sep|okt|oct|nov|des|dec)[a-z]*\.?\s*)?(?:19|20)?\d{2}|\s*[-–—]\s*(?:present|sekarang|now|current(?:ly)?|saat ini|s\.?d\.?\s*(?:sekarang|present)|kini))?(?:[\s•·\-–—,.|()]*(?:present|sekarang|now|current(?:ly)?|saat ini|kini))?[\s•·\-–—,.|()]*$/i;
+
+const isDateOnly = (text: string) =>
+  text.length <= 48 && DATE_ONLY.test(text) && /\d/.test(text);
+
+// A useful evidence line is a short sentence or fact, not a heading or a bare date range.
 const meaningful = (text: string) =>
-  text.length >= 25 &&
+  text.length >= 8 &&
+  text.length <= 300 &&
   text !== text.toUpperCase() &&
-  !/^[\d\s\-–/.,]*(present|sekarang|now)?$/i.test(text);
+  /[a-z]{3}/i.test(text) &&
+  !HEADING.test(text) &&
+  !isDateOnly(text);
 
 async function toCandidate(
   a: Application & { schedule_token?: string | null },
@@ -230,6 +267,7 @@ async function toCandidate(
       .slice(0, 2);
     return {
       name: r.description,
+      matchTerms: expandSkill(r.description),
       status: SKILL[rev?.state ?? "unknown"],
       evidence:
         rev?.explanation ||
@@ -241,29 +279,60 @@ async function toCandidate(
     };
   });
 
-  // Blind-screening excerpt: CV lines the agent linked to a criterion first,
-  // then lines that mention a skill by name; headings and bare dates are dropped.
-  const tagged = evidence
+// Blind-screening excerpt: poin-poin penting dari CV apa adanya, dibagi dua
+// kelompok — pengalaman kerja/organisasi (peran + yang dikerjakan) dan fakta
+// lain (skill, pencapaian, sertifikasi). Tanggal tidak ditampilkan.
+const ROLE_DETAIL =
+  /\b(engineer|developer|programmer|analyst|manager|manajer|male? customer|customer service|customer support|representative|specialis|specialist|supervisor|admin(istrator)?|intern(ship)?|magang|praktikan|staf|staff|konsultan|consultant|koordinator|kasir|cashier|sales|officer|guru|teacher|dosen|asisten|ketua|wakil|bendahara|sekretaris|freelance|part[- ]?time|full[- ]?time|karyawan|crew|team lead)\b/i;
+const DUTY_DETAIL =
+  /^(assisted|assist|supported|handled|responsib(le)?|coordinated|managed|developed|created|maintained|provided|worked|served|membantu|melayani|menangani|bertanggung|mengelola|melakukan|memberikan|membuat|mempromosikan|menjaga|mengembangkan|berfokus|fokus)/i;
+
+  const reqTerms = new Map(
+    requirements.map((r) => [r.id, expandSkill(r.description)]),
+  );
+  const afterDate = { value: false };
+  const pointers = evidence
     .map((e) => {
       const text = tidy(e.passage);
+      if (isDateOnly(text)) {
+        // Baris tanggal tidak ditampilkan, tapi menandai baris berikutnya
+        // sebagai bagian dari pengalaman kerja/organisasi.
+        afterDate.value = true;
+        return null;
+      }
+      if (!meaningful(text)) return null;
+      const isExperience =
+        afterDate.value || /\s[|·]\s/.test(text) || ROLE_DETAIL.test(text) || DUTY_DETAIL.test(text);
+      afterDate.value = false;
       const lower = text.toLowerCase();
       const linked = requirements
         .filter((r) => revisionOf(r.id)?.evidence_ids.includes(e.id))
         .map((r) => r.description);
       const named = requirements
-        .filter((r) => lower.includes(r.description.toLowerCase()))
+        .filter(
+          (r) =>
+            !linked.includes(r.description) &&
+            (reqTerms.get(r.id) ?? []).some(
+              (t) => t.length > 2 && lower.includes(t),
+            ),
+        )
         .map((r) => r.description);
+      const skills = [...linked, ...named];
+      const terms = [...new Set(skills.flatMap((d) => reqTerms.get(d) ?? []))];
       return {
         text,
-        skills: [...new Set([...linked, ...named])],
-        linked: linked.length,
+        skills,
+        terms,
+        kind: (isExperience ? "experience" : "facts") as
+          | "experience"
+          | "facts",
       };
     })
-    .filter((line) => meaningful(line.text) && line.skills.length);
-  const cvExcerpt = tagged
-    .sort((a, b) => b.linked - a.linked || b.skills.length - a.skills.length)
-    .slice(0, 8)
-    .map(({ text, skills }) => ({ text, skills }));
+    .filter(
+      (line): line is NonNullable<typeof line> =>
+        !!line && meaningful(line.text),
+    );
+  const cvExcerpt = pointers.slice(0, 12);
   const points = skills.reduce(
     (sum, s) =>
       sum + (s.status === "verified" ? 1 : s.status === "claimed" ? 0.5 : 0),
@@ -350,7 +419,13 @@ async function toCandidate(
     hiddenFields: [],
     cvExcerpt,
     pipeline: (events?.items ?? []).map(step),
-    questions: analyzed ? suggestQuestions(skills) : [],
+    questions: analyzed
+      ? suggestQuestions(
+          job,
+          skills,
+          (insights?.strengths ?? []).map((s) => s.text),
+        )
+      : [],
     scheduleToken: a.schedule_token,
     documents: (docs?.items ?? []).map((d) => ({
       id: d.id,

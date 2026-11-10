@@ -68,22 +68,49 @@ function Highlight({ text, words }: { text: string; words: string[] }) {
   );
 }
 
-function CvExcerpt({ lines }: { lines: ExcerptLine[] }) {
+function ExcerptItem({ line }: { line: ExcerptLine }) {
   return (
-    <ul className="review-excerpt">
-      {lines.map((line, index) => (
-        <li key={index}>
-          <span>
-            <Highlight text={line.text} words={line.skills} />
-          </span>
-          <span className="excerpt-tags">
-            {line.skills.map((skill) => (
-              <em key={skill}>{skill}</em>
+    <li>
+      <span className="excerpt-main">
+        <Highlight text={line.text} words={line.terms} />
+      </span>
+      {line.skills.length > 0 && (
+        <span className="excerpt-tags">
+          {line.skills.map((skill) => (
+            <em key={skill}>{skill}</em>
+          ))}
+        </span>
+      )}
+    </li>
+  );
+}
+
+function CvExcerpt({ lines }: { lines: ExcerptLine[] }) {
+  const experience = lines.filter((l) => l.kind === "experience");
+  const facts = lines.filter((l) => l.kind !== "experience");
+  return (
+    <>
+      {experience.length > 0 && (
+        <>
+          <h4 className="excerpt-group">Pengalaman kerja &amp; organisasi</h4>
+          <ul className="review-excerpt">
+            {experience.map((line, index) => (
+              <ExcerptItem key={`e${index}`} line={line} />
             ))}
-          </span>
-        </li>
-      ))}
-    </ul>
+          </ul>
+        </>
+      )}
+      {facts.length > 0 && (
+        <>
+          <h4 className="excerpt-group">Skill &amp; fakta lain dari CV</h4>
+          <ul className="review-excerpt">
+            {facts.map((line, index) => (
+              <ExcerptItem key={`f${index}`} line={line} />
+            ))}
+          </ul>
+        </>
+      )}
+    </>
   );
 }
 
@@ -422,7 +449,10 @@ export function CandidateDetail({ id }: { id: string }) {
                     {skill.quotes.map((quote) => (
                       <blockquote className="skill-quote" key={quote}>
                         <FileText size={11} />
-                        <Highlight text={quote} words={[skill.name]} />
+                        <Highlight
+                          text={quote}
+                          words={skill.matchTerms.length ? skill.matchTerms : [skill.name]}
+                        />
                       </blockquote>
                     ))}
                   </div>
@@ -433,8 +463,9 @@ export function CandidateDetail({ id }: { id: string }) {
               ))}
             </ul>
             <p className="review-rule">
-              “Belum ada bukti” bukan berarti tidak mampu. Agent tidak pernah
-              menolak otomatis.
+              Skill yang belum ada buktinya bisa saja ditulis pelamar dengan
+              kata lain di CV — bukti bukan segalanya. Agent tidak pernah
+              menolak otomatis; keputusan tetap di tangan HR.
             </p>
           </section>
 
@@ -444,15 +475,16 @@ export function CandidateDetail({ id }: { id: string }) {
               Usulan pertanyaan interview
             </h2>
             <p className="job-panel-intro">
-              Saran dari agent berdasarkan bukti yang paling lemah. Pakai, ubah,
-              atau abaikan sesuai kebutuhanmu.
+              Usulan dari agent: mayoritas berbicara soal lowongan dan isi CV,
+              dua pertanyaan terakhir ditujukan ke bukti terlemah. Pakai,
+              ubah, atau abaikan sesuai kebutuhanmu.
             </p>
             {candidate.questions.length ? (
               <ol className="review-questions">
                 {candidate.questions.map((item) => (
                   <li key={item.question}>
                     <p>{item.question}</p>
-                    <small>Menyasar: {item.reason}</small>
+                    <small>Fokus: {item.reason}</small>
                   </li>
                 ))}
               </ol>
@@ -471,14 +503,21 @@ export function CandidateDetail({ id }: { id: string }) {
             <p className="job-panel-intro">
               Agent hanya mengirim baris profesional ke model AI. Nama, kontak,
               URL, dan data pribadi disaring dulu, jadi penilaian tidak melihat
-              siapa pelamarnya.
+              siapa pelamarnya. Kriteria dan CV boleh beda bahasa: kata kunci
+              dicocokkan dua-duanya (mis. “empati” juga mendeteksi “empathy”).
             </p>
-            <h3>Baris CV yang relevan dengan lowongan</h3>
+            <h3>Poin penting dari CV</h3>
+            <p className="job-panel-intro">
+              Kalimat pengalaman dan pencapaian utama, urut sesuai CV,
+              dipisahkan antara pengalaman kerja/organisasi dan fakta lainnya.
+              Semua tanpa tanggal — lihat CV asli bila perlu.
+            </p>
             {candidate.cvExcerpt.length ? (
               <CvExcerpt lines={candidate.cvExcerpt} />
             ) : (
               <p className="job-panel-intro">
-                Belum ada baris CV yang terkait dengan skill lowongan ini.
+                Belum ada baris profesional yang bisa ditampilkan. Jalankan
+                analisis AI terlebih dahulu.
               </p>
             )}
           </section>

@@ -37,6 +37,18 @@
   font-size: 11px;
   color: #62626b;
 }
+/* Nama file CV bisa sangat panjang: biarkan membungkus, jangan melebihi panel. */
+.job-panel .skill-tags .button {
+  max-width: 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+  justify-content: flex-start;
+}
+.job-panel .skill-tags .button svg {
+  flex-shrink: 0;
+}
 .job-panel-intro {
   margin-top: 6px;
   color: #6e6e78;
@@ -1654,6 +1666,20 @@ nav.has-indicator .nav-item.active {
   border-radius: 4px;
   background: #ececf1;
   color: #202024;
+  font-weight: 600;
+}
+/* Ikon tombol muat ulang berputar selagi data direfresh. */
+.refresh-button .spin {
+  animation: spin 0.9s linear infinite;
+}
+.excerpt-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.excerpt-group {
+  margin: 18px 0 8px;
+  color: #6b6b76;
+  font-size: 11px;
   font-weight: 600;
 }
 .excerpt-tags {

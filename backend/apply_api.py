@@ -136,22 +136,8 @@ async def apply_submit(
         )
         s.flush()
 
-    # Agent autonomy: queue the AI review right away instead of waiting for HR.
-    # The run is attributed to the HR user who approved these criteria.
-    version = s.get(m.RequirementVersion, v.active_requirement_version_id)
-    run = m.WorkflowRun(
-        org_id=v.org_id, vacancy_id=v.id,
-        requirement_version_id=version.id, requested_by=version.approved_by,
-    )
-    s.add(run)
-    s.flush()
-    s.add(m.WorkflowJob(org_id=v.org_id, run_id=run.id, application_id=a.id, kind="review"))
-    svc.event(
-        s, p, "workflow.queued",
-        "Agent automatically queued an evidence review for the new application.",
-        v.id, a.id, run.id, details={"tool": "auto_review", "result": "queued"},
-    )
-
+    # Agent tidak berjalan otomatis: HR memicu analisis lewat tombol di
+    # dashboard, supaya AI hanya aktif atas permintaan manusia.
     svc.event(
         s, p, "application.applied",
         "Public apply link submission received "

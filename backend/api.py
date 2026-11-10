@@ -932,6 +932,18 @@ def run_create(body: d.RunInput, p=Depends(auth.recruiter), s=Depends(get_db)):
     return svc.public(row)
 
 
+@router.post("/applications/{application_id}/analyze", response_model=d.RunOut, status_code=201)
+def application_analyze(application_id: str, p=Depends(auth.recruiter), s=Depends(get_db)):
+    """HR triggers the agent again for exactly one participant (manual refresh)."""
+    application = svc.own(s, m.Application, application_id, p)
+    row = svc.create_run(
+        s, p, svc.own(s, m.Vacancy, application.vacancy_id, p),
+        only_application=application.id,
+    )
+    s.commit()
+    return svc.public(row)
+
+
 @router.get("/workflow-runs/{id}", response_model=d.RunOut)
 def run_read(id: str, p=Depends(auth.recruiter), s=Depends(get_db)):
     return svc.public(svc.own(s, m.WorkflowRun, id, p))
