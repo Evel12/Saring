@@ -4,7 +4,7 @@ import { getJob } from "@/lib/job-store";
 import { PageHeading } from "../../../dashboard-ui";
 import { ApprovalBoard } from "./approval-board";
 
-export const metadata: Metadata = { title: "Persetujuan shortlist — Saring" };
+export const metadata: Metadata = { title: "Persetujuan shortlist" };
 
 export default async function ApprovalPage({
   params,

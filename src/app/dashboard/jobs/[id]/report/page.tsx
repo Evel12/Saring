@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { getJob } from "@/lib/job-store";
 import { JobReport } from "./job-report";
 
-export const metadata: Metadata = { title: "Laporan lowongan — Saring" };
+export const metadata: Metadata = { title: "Laporan lowongan" };
 
 export default async function ReportPage({
   params,

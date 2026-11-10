@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { JoinForm } from "./join-form";
 
 export const metadata: Metadata = {
-  title: "Gabung ke tim — Saring",
+  title: "Gabung ke tim",
   robots: { index: false },
 };
 

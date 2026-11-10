@@ -28,7 +28,7 @@ export async function generateMetadata({
 }: Pick<Props, "params">): Promise<Metadata> {
   const { id } = await params;
   const job = await getJob(id);
-  return { title: `${job?.title ?? "Lowongan"} — Saring` };
+  return { title: `${job?.title ?? "Lowongan"}` };
 }
 
 export default async function JobDetailPage({ params, searchParams }: Props) {

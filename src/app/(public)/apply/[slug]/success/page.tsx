@@ -5,7 +5,7 @@ import { getApplyJob } from "@/lib/public-apply";
 import { NextSteps, PublicMessage } from "../../../public-ui";
 
 export const metadata: Metadata = {
-  title: "Lamaran diterima — Saring",
+  title: "Lamaran diterima",
   robots: { index: false },
 };
 

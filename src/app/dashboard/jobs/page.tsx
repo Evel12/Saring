@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { AddJobButton, JobCards, PageHeading } from "../dashboard-ui";
 
-export const metadata: Metadata = { title: "Lowongan — Saring" };
+export const metadata: Metadata = { title: "Lowongan" };
 
 export default function JobsPage() {
   return (

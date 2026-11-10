@@ -7,7 +7,7 @@ import { LoginForm } from "./login-form";
 import "../(public)/public.css";
 
 export const metadata: Metadata = {
-  title: "Masuk — Saring",
+  title: "Masuk",
   robots: { index: false },
 };
 
@@ -37,14 +37,14 @@ export default async function LoginPage({
           <div className="public-center">
             <LoginForm next={target} />
           </div>
-          <footer className="page-footer">
-            <span>
-              saring<span>.</span> <i />
-              Lebih dekat dengan talenta yang tepat.
-            </span>
-            <span>Pelamar tidak perlu login. Cukup buka link lamaran.</span>
-          </footer>
         </main>
+        <footer className="page-footer">
+          <span>
+            saring<span>.</span> <i />
+            Lebih dekat dengan talenta yang tepat.
+          </span>
+          <span>Pelamar tidak perlu login. Cukup buka link lamaran.</span>
+        </footer>
       </div>
     </div>
   );

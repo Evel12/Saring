@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Kebijakan privasi pelamar — Saring",
+  title: "Kebijakan privasi pelamar",
 };
 
 const sections = [

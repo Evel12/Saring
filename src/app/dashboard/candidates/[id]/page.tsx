@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { CandidateDetail } from "./candidate-detail";
 
-export const metadata: Metadata = { title: "Kandidat — Saring" };
+export const metadata: Metadata = { title: "Kandidat" };
 
 export default async function CandidatePage({
   params,

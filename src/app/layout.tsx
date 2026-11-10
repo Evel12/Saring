@@ -3,7 +3,7 @@ import { INTRO_SCRIPT } from "@/lib/intro";
 import "./glass.css";
 
 export const metadata: Metadata = {
-  title: "Saring — Ruang kerja rekrutmen",
+  title: "Saring",
   description:
     "Ruang kerja HR untuk meninjau kandidat, memahami bukti, dan menemukan talenta terbaik.",
 };

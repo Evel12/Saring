@@ -9,6 +9,7 @@ import { formatDate } from "@/lib/schedule";
 import { PageHeading } from "../dashboard-ui";
 import { CopyLink } from "../jobs/[id]/copy-link";
 import { Select } from "../../ui-select";
+import { Avatar } from "../candidate-table";
 
 const ROLES = [
   { value: "admin", label: "Admin" },
@@ -30,6 +31,14 @@ type Invitation = {
   role: string;
   expires_at: number;
 };
+
+const initialsOf = (name: string) =>
+  name
+    .split(/[\s@.]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join("");
 
 const joinUrl = (token: string) => `${window.location.origin}/join/${token}`;
 
@@ -119,85 +128,83 @@ export default function TeamPage() {
         <div className="main-column">
           <section className="panel job-panel">
             <h2>Anggota</h2>
-            <div className="table-scroll">
-              <table className="team-table">
-                <thead>
-                  <tr>
-                    <th>Nama</th>
-                    <th>Peran</th>
-                    <th>Status</th>
-                    <th>
-                      <span className="sr-only">Aksi</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {members.map((m) => {
-                    const lastAdmin =
-                      m.role === "admin" && m.active && activeAdmins <= 1;
-                    return (
-                      <tr key={m.id} className={m.active ? "" : "inactive"}>
-                        <td>
-                          <strong>
-                            {m.display_name} {m.is_you && <em>(kamu)</em>}
-                          </strong>
-                          <small>{m.email}</small>
-                        </td>
-                        <td>
-                          <Select
-                            className="role-select"
-                            aria-label={`Peran ${m.display_name}`}
-                            value={m.role}
-                            disabled={!m.active || lastAdmin || busy !== ""}
-                            title={
-                              lastAdmin
-                                ? "Organisasi harus punya minimal satu admin"
-                                : undefined
-                            }
-                            onChange={(role) =>
-                              act(m.id, () =>
-                                request(`/memberships/${m.id}`, {
-                                  method: "PATCH",
-                                  body: { role },
-                                }),
-                              )
-                            }
-                            options={ROLES}
-                          />
-                        </td>
-                        <td>{m.active ? "Aktif" : "Nonaktif"}</td>
-                        <td>
-                          {m.active ? (
-                            <button
-                              type="button"
-                              className="text-button"
-                              disabled={lastAdmin || busy !== ""}
-                              title={
-                                lastAdmin
-                                  ? "Organisasi harus punya minimal satu admin"
-                                  : undefined
-                              }
-                              onClick={() =>
-                                act(m.id, () =>
-                                  request(`/memberships/${m.id}`, {
-                                    method: "PATCH",
-                                    body: { active: false },
-                                  }),
-                                )
-                              }
-                            >
-                              <UserX size={14} /> Nonaktifkan
-                            </button>
-                          ) : (
-                            <small>Undang ulang untuk mengaktifkan</small>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <ul className="team-members">
+              {members.map((m) => {
+                const lastAdmin =
+                  m.role === "admin" && m.active && activeAdmins <= 1;
+                const locked = !m.active || lastAdmin || busy !== "";
+                const why = lastAdmin
+                  ? "Organisasi harus punya minimal satu admin"
+                  : undefined;
+                return (
+                  <li key={m.id} className={m.active ? "" : "inactive"}>
+                    <Avatar
+                      initials={initialsOf(m.display_name || m.email)}
+                      color={m.role === "admin" ? "sand" : "sage"}
+                      small
+                    />
+                    <div className="team-who">
+                      <strong>
+                        {m.display_name} {m.is_you && <em>(kamu)</em>}
+                      </strong>
+                      <small>{m.email}</small>
+                    </div>
+                    <div
+                      className="role-toggle"
+                      role="radiogroup"
+                      aria-label={`Peran ${m.display_name}`}
+                      title={why}
+                    >
+                      {ROLES.map((r) => (
+                        <button
+                          key={r.value}
+                          type="button"
+                          role="radio"
+                          aria-checked={m.role === r.value}
+                          disabled={locked}
+                          onClick={() =>
+                            m.role !== r.value &&
+                            act(m.id, () =>
+                              request(`/memberships/${m.id}`, {
+                                method: "PATCH",
+                                body: { role: r.value },
+                              }),
+                            )
+                          }
+                        >
+                          {r.label}
+                        </button>
+                      ))}
+                    </div>
+                    <span className={`team-status ${m.active ? "on" : ""}`}>
+                      <i />
+                      {m.active ? "Aktif" : "Nonaktif"}
+                    </span>
+                    {m.active ? (
+                      <button
+                        type="button"
+                        className="team-action"
+                        disabled={lastAdmin || busy !== ""}
+                        title={why ?? "Nonaktifkan akun ini"}
+                        aria-label={`Nonaktifkan ${m.display_name}`}
+                        onClick={() =>
+                          act(m.id, () =>
+                            request(`/memberships/${m.id}`, {
+                              method: "PATCH",
+                              body: { active: false },
+                            }),
+                          )
+                        }
+                      >
+                        <UserX size={15} />
+                      </button>
+                    ) : (
+                      <span className="team-action" title="Undang ulang untuk mengaktifkan" />
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
           </section>
 
           <section className="panel job-panel">

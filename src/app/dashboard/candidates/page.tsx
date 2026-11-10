@@ -4,7 +4,7 @@ import { Link2 } from "lucide-react";
 import { CandidateTable } from "../candidate-table";
 import { PageHeading } from "../dashboard-ui";
 
-export const metadata: Metadata = { title: "Kandidat — Saring" };
+export const metadata: Metadata = { title: "Kandidat" };
 
 const first = (value?: string | string[]) =>
   Array.isArray(value) ? value[0] : value;

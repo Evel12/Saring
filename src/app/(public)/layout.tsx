@@ -19,18 +19,18 @@ export default function PublicLayout({
         </header>
         <main>
           <div className="public-center">{children}</div>
-          <footer className="page-footer">
-            <span>
-              saring<span>.</span> <i />
-              Lebih dekat dengan talenta yang tepat.
-            </span>
-            <span className="public-footer-links">
-              <Link href="/privacy">Kebijakan privasi</Link>
-              <i />
-              AI membantu, HR yang memutuskan
-            </span>
-          </footer>
         </main>
+        <footer className="page-footer">
+          <span>
+            saring<span>.</span> <i />
+            Lebih dekat dengan talenta yang tepat.
+          </span>
+          <span className="public-footer-links">
+            <Link href="/privacy">Kebijakan privasi</Link>
+            <i />
+            AI membantu, HR yang memutuskan
+          </span>
+        </footer>
       </div>
     </div>
   );

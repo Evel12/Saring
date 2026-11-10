@@ -6,7 +6,7 @@ import { formatDate, formatTimeRange, getScheduleInvite } from "@/lib/schedule";
 import { PublicMessage } from "../../../public-ui";
 
 export const metadata: Metadata = {
-  title: "Interview terjadwal — Saring",
+  title: "Interview terjadwal",
   robots: { index: false },
 };
 

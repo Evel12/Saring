@@ -12,8 +12,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const job = await getApplyJob(slug);
   return {
     title: job
-      ? `Lamar ${job.title} — ${job.company}`
-      : "Lowongan tidak ditemukan — Saring",
+      ? `Lamar ${job.title} di ${job.company}`
+      : "Lowongan tidak ditemukan",
   };
 }
 

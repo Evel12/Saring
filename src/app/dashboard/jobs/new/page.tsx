@@ -3,7 +3,7 @@ import { connection } from "next/server";
 import { PageHeading } from "../../dashboard-ui";
 import { JobForm } from "./job-form";
 
-export const metadata: Metadata = { title: "Buat lowongan — Saring" };
+export const metadata: Metadata = { title: "Buat lowongan" };
 
 export default async function NewJobPage() {
   await connection();

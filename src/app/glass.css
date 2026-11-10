@@ -2727,8 +2727,9 @@ dialog[open] {
 }
 
 /* Menu akun (titik tiga) di sidebar */
-.user-menu-wrap {
+.sidebar-user > .user-menu-wrap {
   position: relative;
+  flex: none;
 }
 .user-menu {
   position: absolute;
@@ -2807,4 +2808,15 @@ dialog[open] {
 .score-pending {
   color: #a1a1ab;
   font-size: 11.5px;
+}
+
+/* Footer halaman publik & login: menempel ke tepi kiri/kanan layar, sejajar topbar. */
+.public-shell .main-shell > .page-footer {
+  margin-top: 0;
+  padding: 16px 28px 20px;
+}
+@media (max-width: 760px) {
+  .public-shell .main-shell > .page-footer {
+    padding: 14px 17px 18px;
+  }
 }

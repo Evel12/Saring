@@ -6,7 +6,7 @@ import { PublicMessage } from "../../public-ui";
 import { SlotPicker } from "./slot-picker";
 
 export const metadata: Metadata = {
-  title: "Pilih jadwal interview — Saring",
+  title: "Pilih jadwal interview",
   robots: { index: false },
 };
 
